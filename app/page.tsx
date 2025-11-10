@@ -75,27 +75,42 @@ export default function Home() {
     }
   };
 
-  // Sorting Logic remains the same
+// Sorting Logic (Includes Secondary Sort Fix)
   const sortedWorkouts = useMemo(() => {
     if (!sortBy) return workouts;
+
     const sorted = [...workouts];
 
     sorted.sort((a, b) => {
       const aValue = a[sortBy] as any;
       const bValue = b[sortBy] as any;
 
+      // --- PRIMARY SORT: Date ---
       if (sortBy === 'date') {
         const aDate = new Date(aValue).getTime();
         const bDate = new Date(bValue).getTime();
-        if (sortDirection === 'asc') return aDate - bDate;
-        return bDate - aDate;
+        
+        // 1. Primary Comparison (Date)
+        let comparison = sortDirection === 'asc' ? aDate - bDate : bDate - aDate;
+        
+        // 2. Secondary Comparison (If Dates are equal, sort by Exercise Name)
+        if (comparison === 0) {
+          const aExercise = a.exercise.localeCompare(b.exercise);
+          return aExercise; // Sort exercises alphabetically (Ascending)
+        }
+        
+        return comparison; // Return result of date comparison
       }
       
+      // --- ALL OTHER PRIMARY SORTS (Numeric/String) ---
+      
+      // Handle Numeric Sorting
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         if (sortDirection === 'asc') return aValue - bValue;
         return bValue - aValue;
       }
 
+      // Handle String Sorting (Default)
       const aString = String(aValue);
       const bString = String(bValue);
       
@@ -104,7 +119,7 @@ export default function Home() {
     });
 
     return sorted;
-  }, [workouts, sortBy, sortDirection]); 
+  }, [workouts, sortBy, sortDirection]);
 
 
   return (
