@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { WorkoutEntry } from '../../workoutData'; // FIX: Remove the .ts extension
+import { WorkoutEntry } from '../../workoutData'; // Import the type for consistency
 
-// Define props for the form: it receives a function from the parent
+// Define props for the form: it receives a function from the parent.
+// The function now accepts the raw form data, and the parent will add the ID.
 interface WorkoutFormProps {
-    onAddSet: (newEntry: WorkoutEntry) => void;
+    // onAddSet accepts an object that LOOKS like a WorkoutEntry, but without the ID field yet
+    onAddSet: (newEntry: Omit<WorkoutEntry, 'id'>) => void;
 }
 
 // Define the initial shape for a new workout entry
 const initialFormState = {
-  date: new Date().toISOString().slice(0, 10), // Default to today's date in YYYY-MM-DD format
+  date: new Date().toISOString().slice(0, 10), 
   exercise: '',
   weightLbs: 0,
   reps: 0,
@@ -25,7 +27,7 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ onAddSet }) => {
     setFormData(prevData => ({
       ...prevData,
       [name]: type === 'number' ? Number(value) : value,
-    }));
+    } as typeof initialFormState)); // Cast to initialFormState type
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -37,14 +39,8 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ onAddSet }) => {
       return;
     }
 
-    // Convert formData to the WorkoutEntry type (Set is hardcoded to 1 for now)
-    const newEntry: WorkoutEntry = {
-        ...formData,
-        set: formData.set, // Use the default set of 1
-    };
-    
-    // 💥 The KEY ACTION: Call the function passed from the parent (page.tsx)
-    onAddSet(newEntry); 
+    // 💥 The FIX: Pass the form data directly. The parent (page.tsx) will add the ID.
+    onAddSet(formData as Omit<WorkoutEntry, 'id'>); 
 
     // Reset the form after submission
     setFormData(initialFormState);
@@ -89,7 +85,7 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ onAddSet }) => {
             type="number" 
             name="weightLbs" 
             id="weightLbs" 
-            value={formData.weightLbs || ''} // Use empty string to avoid 0 placeholder
+            value={formData.weightLbs || ''} 
             onChange={handleChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" 
           />
