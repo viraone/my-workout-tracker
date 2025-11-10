@@ -1,6 +1,6 @@
 'use client'; 
 
-import React, { useState, useMemo, useEffect } from 'react'; // <-- IMPORTANT: useEffect added
+import React, { useState, useMemo, useEffect } from 'react'; 
 import WorkoutTable from './components/WorkoutTable'; 
 import WorkoutForm from './components/WorkoutForm'; 
 import { historicalWorkouts as initialData, WorkoutEntry } from '../workoutData'; 
@@ -24,6 +24,7 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
+        // NOTE: If local storage has data, it is used. This is why duplicate IDs need to be manually cleared
         return JSON.parse(saved);
       }
     }
@@ -43,13 +44,20 @@ export default function Home() {
   }, [workouts]); // Dependency array: runs every time 'workouts' changes
 
 
-  // Handlers for managing workout data (These remain the same)
-  const addWorkoutEntry = (newEntry: WorkoutEntry) => {
-    const newId = Date.now(); 
-    const entryWithId = { ...newEntry, id: newId };
+  // Handlers for managing workout data
+  // FIX: This function now accepts the raw form data (without 'id')
+  const addWorkoutEntry = (newEntryData: Omit<WorkoutEntry, 'id'>) => {
+    // Generate a unique ID 
+    const maxId = workouts.length > 0 ? Math.max(...workouts.map(w => w.id)) : 0;
+    const newId = maxId + 1; 
+    
+    // Create the complete entry object with the newly generated ID
+    const entryWithId: WorkoutEntry = { ...newEntryData, id: newId };
+    
     setWorkouts([entryWithId, ...workouts]);
   };
   
+  // Update handler
   const updateWorkoutEntry = (indexToUpdate: number, updatedEntry: WorkoutEntry) => {
     setWorkouts(currentWorkouts => 
         currentWorkouts.map((workout, index) => {
@@ -61,6 +69,7 @@ export default function Home() {
     );
   };
   
+  // Delete handler
   const deleteWorkoutEntry = (indexToDelete: number) => {
       const updatedWorkouts = workouts.filter((_, index) => index !== indexToDelete);
       setWorkouts(updatedWorkouts);
@@ -75,7 +84,7 @@ export default function Home() {
     }
   };
 
-// Sorting Logic (Includes Secondary Sort Fix)
+  // Sorting Logic (Includes Secondary Sort Fix and Date Fix)
   const sortedWorkouts = useMemo(() => {
     if (!sortBy) return workouts;
 
@@ -96,13 +105,13 @@ export default function Home() {
         // 2. Secondary Comparison (If Dates are equal, sort by Exercise Name)
         if (comparison === 0) {
           const aExercise = a.exercise.localeCompare(b.exercise);
-          return aExercise; // Sort exercises alphabetically (Ascending)
+          return aExercise; 
         }
         
-        return comparison; // Return result of date comparison
+        return comparison;
       }
       
-      // --- ALL OTHER PRIMARY SORTS (Numeric/String) ---
+      // --- ALL OTHER PRIMARY SORTS ---
       
       // Handle Numeric Sorting
       if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -119,7 +128,7 @@ export default function Home() {
     });
 
     return sorted;
-  }, [workouts, sortBy, sortDirection]);
+  }, [workouts, sortBy, sortDirection]); 
 
 
   return (
