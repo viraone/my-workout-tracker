@@ -12,7 +12,7 @@ interface WorkoutTableProps {
   onUpdateSet: (index: number, updatedEntry: WorkoutEntry) => void;
   onDeleteSet: (index: number) => void; 
   onSort: (key: SortKey) => void; 
-  // FIX: These names are updated to match the props passed from page.tsx
+  // FIX APPLIED HERE: These names MUST be currentSortBy/currentDirection
   currentSortBy: SortKey; 
   currentDirection: SortDirection; 
 }
@@ -29,7 +29,7 @@ interface WorkoutRowProps {
 }
 
 // ----------------------------------------------------------------------
-// 1. WORKOUT ROW COMPONENT 
+// 1. WORKOUT ROW COMPONENT (Body remains the same)
 // ----------------------------------------------------------------------
 
 const WorkoutRow: React.FC<WorkoutRowProps> = ({ 
@@ -46,7 +46,7 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
 
     useEffect(() => {
         if (isEditing) {
-            setEditData(entry); // Sync local state with current props
+            setEditData(entry); 
         }
     }, [isEditing, entry]); 
 
@@ -122,7 +122,7 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
 };
 
 // ----------------------------------------------------------------------
-// 2. SORTABLE HEADER COMPONENT (Omitted for brevity, code is correct)
+// 2. SORTABLE HEADER COMPONENT (Body remains the same)
 // ----------------------------------------------------------------------
 
 const SortableHeader: React.FC<{ 
@@ -169,7 +169,7 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
     onUpdateSet, 
     onDeleteSet,
     onSort, 
-    // FIX: Destructure the expected prop names
+    // FIX: Destructure the expected prop names (matches the new interface definition above)
     currentSortBy, 
     currentDirection
 }) => {
