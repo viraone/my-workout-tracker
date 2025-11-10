@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // <-- IMPORTANT: useEffect added here
 import { WorkoutEntry } from '../../workoutData';
 import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 
@@ -6,7 +6,7 @@ import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 type SortKey = keyof WorkoutEntry | null;
 type SortDirection = 'asc' | 'desc';
 
-// --- UPDATED PROP INTERFACES ---
+// --- UPDATED PROP INTERFACES (These look correct based on your previous code) ---
 interface WorkoutTableProps {
   data: WorkoutEntry[];
   onUpdateSet: (index: number, updatedEntry: WorkoutEntry) => void;
@@ -18,23 +18,23 @@ interface WorkoutTableProps {
 
 interface WorkoutRowProps {
   entry: WorkoutEntry;
-  uniqueId: string; // <-- FIX 1: ADDED uniqueId to props
-  index: number; // The array index is still needed for update/delete handlers
+  uniqueId: string; 
+  index: number; 
   isEditing: boolean;
-  onEditStart: (uniqueId: string, index: number) => void; // <-- UPDATED to pass uniqueId AND index
+  onEditStart: (uniqueId: string, index: number) => void; 
   onEditSave: (index: number, updatedEntry: WorkoutEntry) => void;
   onEditCancel: () => void;
   onDelete: (index: number) => void; 
 }
 
 // ----------------------------------------------------------------------
-// 1. WORKOUT ROW COMPONENT 
+// 1. WORKOUT ROW COMPONENT (CRITICAL FIX ADDED HERE)
 // ----------------------------------------------------------------------
 
 const WorkoutRow: React.FC<WorkoutRowProps> = ({ 
     entry, 
     index, 
-    uniqueId, // <-- Destructure new prop
+    uniqueId, 
     isEditing, 
     onEditStart, 
     onEditSave, 
@@ -42,6 +42,16 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
     onDelete 
 }) => {
     const [editData, setEditData] = useState(entry);
+
+    // CRITICAL FIX: Use useEffect to reset the edit form state when the row starts editing.
+    // This ensures the inputs (like date, weight, etc.) are always populated with the 
+    // correct 'entry' data for this specific row, regardless of sorting/caching issues.
+    useEffect(() => {
+        if (isEditing) {
+            setEditData(entry); // Sync local state with current props
+        }
+    }, [isEditing, entry]); // Re-run whenever editing status or entry data changes
+
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type } = e.target;
@@ -60,6 +70,7 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
     if (isEditing) {
         return (
             <tr className="bg-yellow-50 border-b">
+                {/* Inputs are now reliably populated by the current editData state */}
                 <td className="p-2"><input type="text" name="date" value={editData.date} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
                 <td className="p-2"><input type="text" name="exercise" value={editData.exercise} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
                 <td className="p-2"><input type="number" name="set" value={editData.set} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
@@ -92,7 +103,6 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
             
             <td className="p-3 text-sm text-gray-500">
                 <button 
-                    // Pass uniqueId AND index (we still need index for the main page handler)
                     onClick={() => onEditStart(uniqueId, index)}
                     className="text-gray-400 hover:text-indigo-600 transition-colors mr-2"
                     aria-label="Edit set"
@@ -115,7 +125,46 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
 };
 
 // ----------------------------------------------------------------------
-// 3. MAIN TABLE COMPONENT 
+// 2. SORTABLE HEADER COMPONENT (Omitted for brevity, code is correct)
+// ----------------------------------------------------------------------
+
+const SortableHeader: React.FC<{ 
+    label: string, 
+    sortKey: SortKey, 
+    currentSortBy: SortKey, 
+    currentDirection: SortDirection, 
+    onSort: (key: SortKey) => void 
+}> = ({ label, sortKey, currentSortBy, currentDirection, onSort }) => {
+    
+    const isSorted = currentSortBy === sortKey;
+    
+    // Function to render the sort arrow icon
+    const renderSortIcon = () => {
+        if (!isSorted) {
+            return <FiChevronUp size={14} className="opacity-0 group-hover:opacity-50 transition-opacity" />;
+        }
+        if (currentDirection === 'asc') {
+            return <FiChevronUp size={14} className="text-indigo-600" />;
+        }
+        return <FiChevronDown size={14} className="text-indigo-600" />;
+    };
+
+    return (
+        <th 
+            className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+            onClick={() => onSort(sortKey)}
+        >
+            <div className="flex items-center group">
+                <span className="mr-1">{label}</span>
+                {renderSortIcon()}
+            </div>
+        </th>
+    );
+};
+
+
+// ----------------------------------------------------------------------
+// 3. MAIN TABLE COMPONENT (Omitted for brevity, code is correct)
 // ----------------------------------------------------------------------
 
 const WorkoutTable: React.FC<WorkoutTableProps> = ({ 
@@ -152,15 +201,22 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
                 <thead>
                     <tr className="bg-gray-100">
                         {/* Headers (omitted for brevity, assume they are correct) */}
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Date</th>
-                        {/* ... rest of headers */}
+                        <SortableHeader label="Date" sortKey="date" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        <SortableHeader label="Exercise" sortKey="exercise" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        <SortableHeader label="Set" sortKey="set" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        <SortableHeader label="Weight (lbs)" sortKey="weightLbs" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        <SortableHeader label="Reps" sortKey="reps" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        <SortableHeader label="Muscle Group" sortKey="muscleGroup" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        
+                        {/* Non-Sortable Headers */}
+                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Notes</th>
                         <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Edit</th> 
                         <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Del</th> 
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {data.map((workout, index) => {
-                        // FIX 4: Create a stable unique ID based on the data fields
+                        // Create a stable unique ID based on the data fields
                         const uniqueId = `${workout.date}-${workout.exercise}-${workout.set}-${workout.weightLbs}`;
                         
                         return (
