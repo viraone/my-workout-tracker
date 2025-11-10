@@ -10,7 +10,7 @@ interface WorkoutTableProps {
   data: WorkoutEntry[];
   onUpdateSet: (index: number, updatedEntry: WorkoutEntry) => void;
   onDeleteSet: (index: number) => void;
-  // NEW: Props for sorting
+  // These props are passed DOWN from page.tsx (where they are named sortBy/sortDirection)
   onSort: (key: SortKey) => void; 
   sortBy: SortKey; 
   sortDirection: SortDirection;
@@ -27,7 +27,7 @@ interface WorkoutRowProps {
 }
 
 // ----------------------------------------------------------------------
-// 1. WORKOUT ROW COMPONENT (Remains the same, but full code included for clarity)
+// 1. WORKOUT ROW COMPONENT 
 // ----------------------------------------------------------------------
 
 const WorkoutRow: React.FC<WorkoutRowProps> = ({ 
@@ -112,7 +112,7 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
 };
 
 // ----------------------------------------------------------------------
-// 2. SORTABLE HEADER COMPONENT (NEW)
+// 2. SORTABLE HEADER COMPONENT (Remains the same)
 // ----------------------------------------------------------------------
 
 const SortableHeader: React.FC<{ 
@@ -128,7 +128,6 @@ const SortableHeader: React.FC<{
     // Function to render the sort arrow icon
     const renderSortIcon = () => {
         if (!isSorted) {
-            // Invisible arrow placeholder when not sorted
             return <FiChevronUp size={14} className="opacity-0 group-hover:opacity-50 transition-opacity" />;
         }
         if (currentDirection === 'asc') {
@@ -152,16 +151,16 @@ const SortableHeader: React.FC<{
 
 
 // ----------------------------------------------------------------------
-// 3. MAIN TABLE COMPONENT (Updated to use SortableHeader)
+// 3. MAIN TABLE COMPONENT (FIXED PROP PASSING)
 // ----------------------------------------------------------------------
 
 const WorkoutTable: React.FC<WorkoutTableProps> = ({ 
     data, 
     onUpdateSet, 
     onDeleteSet,
-    onSort, // Destructure new sorting props
+    onSort, 
     sortBy, 
-    sortDirection
+    sortDirection // Destructure the props passed from page.tsx
 }) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
@@ -183,13 +182,49 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
             <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                     <tr className="bg-gray-100">
-                        {/* Use the SortableHeader component for these columns */}
-                        <SortableHeader label="Date" sortKey="date" {...{ onSort, sortBy, sortDirection }} />
-                        <SortableHeader label="Exercise" sortKey="exercise" {...{ onSort, sortBy, sortDirection }} />
-                        <SortableHeader label="Set" sortKey="set" {...{ onSort, sortBy, sortDirection }} />
-                        <SortableHeader label="Weight (lbs)" sortKey="weightLbs" {...{ onSort, sortBy, sortDirection }} />
-                        <SortableHeader label="Reps" sortKey="reps" {...{ onSort, sortBy, sortDirection }} />
-                        <SortableHeader label="Muscle Group" sortKey="muscleGroup" {...{ onSort, sortBy, sortDirection }} />
+                        {/* FIX: Explicitly map the prop names to match the SortableHeader component */}
+                        <SortableHeader 
+                            label="Date" 
+                            sortKey="date" 
+                            onSort={onSort}
+                            currentSortBy={sortBy}        // <-- FIX
+                            currentDirection={sortDirection} // <-- FIX
+                        />
+                        <SortableHeader 
+                            label="Exercise" 
+                            sortKey="exercise" 
+                            onSort={onSort}
+                            currentSortBy={sortBy}
+                            currentDirection={sortDirection}
+                        />
+                        <SortableHeader 
+                            label="Set" 
+                            sortKey="set" 
+                            onSort={onSort}
+                            currentSortBy={sortBy}
+                            currentDirection={sortDirection}
+                        />
+                        <SortableHeader 
+                            label="Weight (lbs)" 
+                            sortKey="weightLbs" 
+                            onSort={onSort}
+                            currentSortBy={sortBy}
+                            currentDirection={sortDirection}
+                        />
+                        <SortableHeader 
+                            label="Reps" 
+                            sortKey="reps" 
+                            onSort={onSort}
+                            currentSortBy={sortBy}
+                            currentDirection={sortDirection}
+                        />
+                        <SortableHeader 
+                            label="Muscle Group" 
+                            sortKey="muscleGroup" 
+                            onSort={onSort}
+                            currentSortBy={sortBy}
+                            currentDirection={sortDirection}
+                        />
                         
                         {/* Non-Sortable Headers */}
                         <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Notes</th>
