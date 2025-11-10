@@ -1,6 +1,6 @@
 'use client'; 
 
-import React, { useState, useMemo } from 'react'; 
+import React, { useState, useMemo, useEffect } from 'react'; // <-- IMPORTANT: useEffect added
 import WorkoutTable from './components/WorkoutTable'; 
 import WorkoutForm from './components/WorkoutForm'; 
 import { historicalWorkouts as initialData, WorkoutEntry } from '../workoutData'; 
@@ -9,33 +9,51 @@ import { historicalWorkouts as initialData, WorkoutEntry } from '../workoutData'
 type SortKey = keyof WorkoutEntry | null;
 type SortDirection = 'asc' | 'desc';
 
+// Define the Local Storage Key
+const LOCAL_STORAGE_KEY = 'workoutTrackerData';
+
+
 // ----------------------------------------------------------------------
 // PAGE COMPONENT
 // ----------------------------------------------------------------------
 
 export default function Home() {
-  const [workouts, setWorkouts] = useState<WorkoutEntry[]>(initialData);
+  // 1. STATE INITIALIZATION: Check Local Storage first, fall back to initialData
+  const [workouts, setWorkouts] = useState<WorkoutEntry[]>(() => {
+    // This function runs only once during initial component render
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    }
+    // Fallback to the data from workoutData.ts if nothing in local storage
+    return initialData;
+  });
+  
   const [sortBy, setSortBy] = useState<SortKey>('date'); 
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc'); 
 
-  // Handlers for managing workout data
+  // 2. EFFECT: Save to Local Storage whenever 'workouts' state changes
+  useEffect(() => {
+    // Only save if we are running in the browser environment
+    if (typeof window !== 'undefined') {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(workouts));
+    }
+  }, [workouts]); // Dependency array: runs every time 'workouts' changes
+
+
+  // Handlers for managing workout data (These remain the same)
   const addWorkoutEntry = (newEntry: WorkoutEntry) => {
-    // Ensure new entry has a unique ID (simple time-based ID for now)
     const newId = Date.now(); 
     const entryWithId = { ...newEntry, id: newId };
     setWorkouts([entryWithId, ...workouts]);
   };
   
-  // FIX: This handler is updated to ensure the item is replaced correctly.
   const updateWorkoutEntry = (indexToUpdate: number, updatedEntry: WorkoutEntry) => {
-    // The safest way is to map over the array and replace the item at the specific index.
-    // This relies on the index passed from the WorkoutTable being the index in the *sorted* array,
-    // which is then mapped back to the *original* state array order.
-    
     setWorkouts(currentWorkouts => 
         currentWorkouts.map((workout, index) => {
             if (index === indexToUpdate) {
-                // Return the updated entry object, ensuring the new date/data is fully merged
                 return updatedEntry; 
             }
             return workout;
@@ -48,7 +66,6 @@ export default function Home() {
       setWorkouts(updatedWorkouts);
   };
 
-  // Handler for sorting the table
   const handleSort = (key: SortKey) => {
     if (key === sortBy) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -58,32 +75,27 @@ export default function Home() {
     }
   };
 
-  // Sorting Logic (Includes Date Fix)
+  // Sorting Logic remains the same
   const sortedWorkouts = useMemo(() => {
     if (!sortBy) return workouts;
-
     const sorted = [...workouts];
 
     sorted.sort((a, b) => {
       const aValue = a[sortBy] as any;
       const bValue = b[sortBy] as any;
 
-      // Handle Date Sorting: Convert string dates to comparable timestamps
       if (sortBy === 'date') {
         const aDate = new Date(aValue).getTime();
         const bDate = new Date(bValue).getTime();
-        
         if (sortDirection === 'asc') return aDate - bDate;
         return bDate - aDate;
       }
       
-      // Handle Numeric Sorting
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         if (sortDirection === 'asc') return aValue - bValue;
         return bValue - aValue;
       }
 
-      // Handle String Sorting
       const aString = String(aValue);
       const bString = String(bValue);
       
@@ -112,10 +124,9 @@ export default function Home() {
       {/* DETAILED LOG TABLE */}
       <section className="max-w-6xl mx-auto mt-4"> 
           <WorkoutTable 
-              data={sortedWorkouts} // Pass the sorted data
+              data={sortedWorkouts}
               onUpdateSet={updateWorkoutEntry} 
               onDeleteSet={deleteWorkoutEntry}
-              // Corrected prop names for sorting
               onSort={handleSort}
               currentSortBy={sortBy}
               currentDirection={sortDirection}
