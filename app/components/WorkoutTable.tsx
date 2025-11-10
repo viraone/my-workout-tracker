@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
-import { WorkoutEntry } from '../../workoutData'; // FIX: Remove the .ts extension
-import { FiEdit2, FiTrash2 } from 'react-icons/fi'; // Import the Trash icon (FiTrash2)
+import { WorkoutEntry } from '../../workoutData';
+import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi'; // Import sorting icons
+
+// Define types for sorting state
+type SortKey = keyof WorkoutEntry | null;
+type SortDirection = 'asc' | 'desc';
 
 interface WorkoutTableProps {
   data: WorkoutEntry[];
   onUpdateSet: (index: number, updatedEntry: WorkoutEntry) => void;
-  onDeleteSet: (index: number) => void; // NEW: Handler for deleting a set
+  onDeleteSet: (index: number) => void;
+  // NEW: Props for sorting
+  onSort: (key: SortKey) => void; 
+  sortBy: SortKey; 
+  sortDirection: SortDirection;
 }
 
 interface WorkoutRowProps {
@@ -15,11 +23,11 @@ interface WorkoutRowProps {
   onEditStart: (index: number) => void;
   onEditSave: (index: number, updatedEntry: WorkoutEntry) => void;
   onEditCancel: () => void;
-  onDelete: (index: number) => void; // NEW: Handler for deleting
+  onDelete: (index: number) => void; 
 }
 
 // ----------------------------------------------------------------------
-// 1. WORKOUT ROW COMPONENT (Handles Display, Editing, and Deleting)
+// 1. WORKOUT ROW COMPONENT (Remains the same, but full code included for clarity)
 // ----------------------------------------------------------------------
 
 const WorkoutRow: React.FC<WorkoutRowProps> = ({ 
@@ -29,9 +37,8 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
     onEditStart, 
     onEditSave, 
     onEditCancel,
-    onDelete // Destructure the new delete handler
+    onDelete 
 }) => {
-    // Local state to manage the temporary form data during editing
     const [editData, setEditData] = useState(entry);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,16 +49,13 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
         } as WorkoutEntry)); 
     };
     
-    // Handler for the delete action with a confirmation prompt
     const handleDeleteClick = () => {
         if (window.confirm(`Are you sure you want to delete the set: ${entry.exercise} (${entry.weightLbs} lbs)?`)) {
             onDelete(index);
         }
     };
 
-
     if (isEditing) {
-        // RENDER EDITING MODE (Inputs instead of plain text)
         return (
             <tr className="bg-yellow-50 border-b">
                 <td className="p-2"><input type="text" name="date" value={editData.date} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
@@ -65,12 +69,11 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
                     <button onClick={() => onEditSave(index, editData)} className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded text-xs">Save</button>
                     <button onClick={onEditCancel} className="text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded text-xs">Cancel</button>
                 </td>
-                <td className="p-2"></td> {/* Empty column when editing */}
+                <td className="p-2"></td>
             </tr>
         );
     }
     
-    // RENDER DISPLAY MODE (Default View)
     return (
         <tr className="border-b hover:bg-gray-50 transition-colors duration-150">
             <td className="p-3 text-sm font-medium text-gray-900">{entry.date}</td>
@@ -85,7 +88,6 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
             </td>
             <td className="p-3 text-sm text-gray-500 italic">{entry.notes || '-'}</td>
             
-            {/* Action Column: Edit Icon */}
             <td className="p-3 text-sm text-gray-500">
                 <button 
                     onClick={() => onEditStart(index)}
@@ -96,14 +98,13 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
                 </button>
             </td>
             
-            {/* NEW Action Column: Delete Icon */}
             <td className="p-3 text-sm text-gray-500">
                 <button 
                     onClick={handleDeleteClick}
                     className="text-gray-400 hover:text-red-600 transition-colors"
                     aria-label="Delete set"
                 >
-                    <FiTrash2 size={16} /> {/* The Trash Icon */}
+                    <FiTrash2 size={16} /> 
                 </button>
             </td>
         </tr>
@@ -111,11 +112,57 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
 };
 
 // ----------------------------------------------------------------------
-// 2. MAIN TABLE COMPONENT
+// 2. SORTABLE HEADER COMPONENT (NEW)
 // ----------------------------------------------------------------------
 
-const WorkoutTable: React.FC<WorkoutTableProps> = ({ data, onUpdateSet, onDeleteSet }) => {
-    // State to track which row (by index) is currently in editing mode
+const SortableHeader: React.FC<{ 
+    label: string, 
+    sortKey: SortKey, 
+    currentSortBy: SortKey, 
+    currentDirection: SortDirection, 
+    onSort: (key: SortKey) => void 
+}> = ({ label, sortKey, currentSortBy, currentDirection, onSort }) => {
+    
+    const isSorted = currentSortBy === sortKey;
+    
+    // Function to render the sort arrow icon
+    const renderSortIcon = () => {
+        if (!isSorted) {
+            // Invisible arrow placeholder when not sorted
+            return <FiChevronUp size={14} className="opacity-0 group-hover:opacity-50 transition-opacity" />;
+        }
+        if (currentDirection === 'asc') {
+            return <FiChevronUp size={14} className="text-indigo-600" />;
+        }
+        return <FiChevronDown size={14} className="text-indigo-600" />;
+    };
+
+    return (
+        <th 
+            className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+            onClick={() => onSort(sortKey)}
+        >
+            <div className="flex items-center group">
+                <span className="mr-1">{label}</span>
+                {renderSortIcon()}
+            </div>
+        </th>
+    );
+};
+
+
+// ----------------------------------------------------------------------
+// 3. MAIN TABLE COMPONENT (Updated to use SortableHeader)
+// ----------------------------------------------------------------------
+
+const WorkoutTable: React.FC<WorkoutTableProps> = ({ 
+    data, 
+    onUpdateSet, 
+    onDeleteSet,
+    onSort, // Destructure new sorting props
+    sortBy, 
+    sortDirection
+}) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
     const handleEditStart = (index: number) => {
@@ -123,12 +170,12 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({ data, onUpdateSet, onDelete
     };
 
     const handleEditSave = (index: number, updatedEntry: WorkoutEntry) => {
-        onUpdateSet(index, updatedEntry); // Pass update to the parent (page.tsx)
-        setEditingIndex(null); // Exit editing mode
+        onUpdateSet(index, updatedEntry); 
+        setEditingIndex(null); 
     };
 
     const handleEditCancel = () => {
-        setEditingIndex(null); // Exit editing mode
+        setEditingIndex(null); 
     };
 
     return (
@@ -136,15 +183,18 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({ data, onUpdateSet, onDelete
             <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                     <tr className="bg-gray-100">
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Date</th>
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Exercise</th>
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Set</th>
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Weight (lbs)</th>
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Reps</th>
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Muscle Group</th>
+                        {/* Use the SortableHeader component for these columns */}
+                        <SortableHeader label="Date" sortKey="date" {...{ onSort, sortBy, sortDirection }} />
+                        <SortableHeader label="Exercise" sortKey="exercise" {...{ onSort, sortBy, sortDirection }} />
+                        <SortableHeader label="Set" sortKey="set" {...{ onSort, sortBy, sortDirection }} />
+                        <SortableHeader label="Weight (lbs)" sortKey="weightLbs" {...{ onSort, sortBy, sortDirection }} />
+                        <SortableHeader label="Reps" sortKey="reps" {...{ onSort, sortBy, sortDirection }} />
+                        <SortableHeader label="Muscle Group" sortKey="muscleGroup" {...{ onSort, sortBy, sortDirection }} />
+                        
+                        {/* Non-Sortable Headers */}
                         <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Notes</th>
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Edit</th> {/* Column for Edit */}
-                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Del</th> {/* NEW Column for Delete */}
+                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Edit</th> 
+                        <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Del</th> 
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -157,7 +207,7 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({ data, onUpdateSet, onDelete
                             onEditStart={handleEditStart}
                             onEditSave={handleEditSave}
                             onEditCancel={handleEditCancel}
-                            onDelete={onDeleteSet} // Pass the delete handler
+                            onDelete={onDeleteSet} 
                         />
                     ))}
                 </tbody>

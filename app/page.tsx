@@ -3,9 +3,11 @@
 import React, { useState, useMemo } from 'react'; 
 import WorkoutTable from './components/WorkoutTable'; 
 import WorkoutForm from './components/WorkoutForm'; 
-// import FilterBar from './components/FilterBar'; // <-- COMMENTED OUT: We have not built this yet
-// import VolumeChart from './components/VolumeChart'; // <-- COMMENTED OUT: We have not built this yet
-import { historicalWorkouts as initialData, WorkoutEntry } from '../workoutData'; // FIX: Remove the .ts extension
+import { historicalWorkouts as initialData, WorkoutEntry } from '../workoutData'; 
+
+// Define types for sorting state
+type SortKey = keyof WorkoutEntry | null;
+type SortDirection = 'asc' | 'desc';
 
 // ----------------------------------------------------------------------
 // PAGE COMPONENT
@@ -13,7 +15,10 @@ import { historicalWorkouts as initialData, WorkoutEntry } from '../workoutData'
 
 export default function Home() {
   const [workouts, setWorkouts] = useState<WorkoutEntry[]>(initialData);
-  
+  // NEW State: Tracking sort settings
+  const [sortBy, setSortBy] = useState<SortKey>('date'); 
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc'); 
+
   // Handlers for managing workout data
   const addWorkoutEntry = (newEntry: WorkoutEntry) => {
     setWorkouts([newEntry, ...workouts]);
@@ -30,12 +35,45 @@ export default function Home() {
       setWorkouts(updatedWorkouts);
   };
 
-  // ------------------------------------------------------
-  // Filtering Logic (Simplified for now)
-  // ------------------------------------------------------
-  const filteredWorkouts = workouts; // Simply display all workouts for now
-  
-  // Note: We can remove the "filter" state and the useMemo hook for now to keep it simpler.
+  // NEW: Handler for sorting the table
+  const handleSort = (key: SortKey) => {
+    if (key === sortBy) {
+      // If same key is clicked, reverse direction
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If new key is clicked, set new key and default to descending
+      setSortBy(key);
+      setSortDirection('desc'); 
+    }
+  };
+
+  // Sorting Logic using useMemo (to prevent unnecessary recalculations)
+  const sortedWorkouts = useMemo(() => {
+    if (!sortBy) return workouts;
+
+    const sorted = [...workouts];
+
+    sorted.sort((a, b) => {
+      const aValue = a[sortBy] as any;
+      const bValue = b[sortBy] as any;
+      
+      // Handle numeric sorting (Weight, Reps, Set)
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (sortDirection === 'asc') return aValue - bValue;
+        return bValue - aValue;
+      }
+
+      // Handle string/date sorting (Date, Exercise, Muscle Group). Crucially sorts by date correctly.
+      const aString = String(aValue);
+      const bString = String(bValue);
+      
+      if (sortDirection === 'asc') return aString.localeCompare(bString);
+      return bString.localeCompare(aString);
+    });
+
+    return sorted;
+  }, [workouts, sortBy, sortDirection]);
+
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
@@ -51,28 +89,16 @@ export default function Home() {
         <WorkoutForm onAddSet={addWorkoutEntry} /> 
       </section>
       
-      {/* CHART SECTION: REMOVED to fix the VolumeChart error 
-      <section className="max-w-6xl mx-auto mb-10">
-          <VolumeChart data={workouts} /> 
-      </section>
-      */}
-      
-      {/* FILTER BAR SECTION: REMOVED to fix the FilterBar error 
-      <section className="max-w-6xl mx-auto mb-4">
-        <FilterBar 
-            muscleGroups={['All']} // Placeholder
-            currentFilter={'All'}
-            onFilterChange={() => {}}
-        />
-      </section>
-      */}
-
       {/* DETAILED LOG TABLE */}
       <section className="max-w-6xl mx-auto mt-4"> 
           <WorkoutTable 
-              data={filteredWorkouts} 
+              data={sortedWorkouts} // Pass the sorted data
               onUpdateSet={updateWorkoutEntry} 
-              onDeleteSet={deleteWorkoutEntry} 
+              onDeleteSet={deleteWorkoutEntry}
+              // Pass the sorting state and handler
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDirection={sortDirection}
           /> 
       </section>
 
