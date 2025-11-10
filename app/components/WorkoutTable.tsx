@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // <-- IMPORTANT: useEffect added here
+import React, { useState, useEffect } from 'react'; 
 import { WorkoutEntry } from '../../workoutData';
 import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 
@@ -6,14 +6,15 @@ import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 type SortKey = keyof WorkoutEntry | null;
 type SortDirection = 'asc' | 'desc';
 
-// --- UPDATED PROP INTERFACES (These look correct based on your previous code) ---
+// --- FIXED PROP INTERFACES ---
 interface WorkoutTableProps {
   data: WorkoutEntry[];
   onUpdateSet: (index: number, updatedEntry: WorkoutEntry) => void;
   onDeleteSet: (index: number) => void; 
   onSort: (key: SortKey) => void; 
-  sortBy: SortKey; 
-  sortDirection: SortDirection;
+  // FIX: These names are updated to match the props passed from page.tsx
+  currentSortBy: SortKey; 
+  currentDirection: SortDirection; 
 }
 
 interface WorkoutRowProps {
@@ -28,7 +29,7 @@ interface WorkoutRowProps {
 }
 
 // ----------------------------------------------------------------------
-// 1. WORKOUT ROW COMPONENT (CRITICAL FIX ADDED HERE)
+// 1. WORKOUT ROW COMPONENT 
 // ----------------------------------------------------------------------
 
 const WorkoutRow: React.FC<WorkoutRowProps> = ({ 
@@ -43,14 +44,11 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
 }) => {
     const [editData, setEditData] = useState(entry);
 
-    // CRITICAL FIX: Use useEffect to reset the edit form state when the row starts editing.
-    // This ensures the inputs (like date, weight, etc.) are always populated with the 
-    // correct 'entry' data for this specific row, regardless of sorting/caching issues.
     useEffect(() => {
         if (isEditing) {
             setEditData(entry); // Sync local state with current props
         }
-    }, [isEditing, entry]); // Re-run whenever editing status or entry data changes
+    }, [isEditing, entry]); 
 
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,7 +68,6 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
     if (isEditing) {
         return (
             <tr className="bg-yellow-50 border-b">
-                {/* Inputs are now reliably populated by the current editData state */}
                 <td className="p-2"><input type="text" name="date" value={editData.date} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
                 <td className="p-2"><input type="text" name="exercise" value={editData.exercise} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
                 <td className="p-2"><input type="number" name="set" value={editData.set} onChange={handleChange} className="w-full text-sm p-1 border rounded" /></td>
@@ -164,7 +161,7 @@ const SortableHeader: React.FC<{
 
 
 // ----------------------------------------------------------------------
-// 3. MAIN TABLE COMPONENT (Omitted for brevity, code is correct)
+// 3. MAIN TABLE COMPONENT (FIXED PROP PASSING)
 // ----------------------------------------------------------------------
 
 const WorkoutTable: React.FC<WorkoutTableProps> = ({ 
@@ -172,17 +169,16 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
     onUpdateSet, 
     onDeleteSet,
     onSort, 
-    sortBy, 
-    sortDirection
+    // FIX: Destructure the expected prop names
+    currentSortBy, 
+    currentDirection
 }) => {
-    // FIX 2: Change editingIndex state type to string (to match uniqueId)
     const [editingIndex, setEditingIndex] = useState<string | null>(null);
     const [editingData, setEditingData] = useState<WorkoutEntry | null>(null);
 
 
     const handleEditStart = (id: string, index: number) => {
         setEditingIndex(id);
-        // FIX 3: Set the editing data right away to prevent showing old data
         setEditingData(data[index]);
     };
 
@@ -200,13 +196,13 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
             <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                     <tr className="bg-gray-100">
-                        {/* Headers (omitted for brevity, assume they are correct) */}
-                        <SortableHeader label="Date" sortKey="date" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
-                        <SortableHeader label="Exercise" sortKey="exercise" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
-                        <SortableHeader label="Set" sortKey="set" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
-                        <SortableHeader label="Weight (lbs)" sortKey="weightLbs" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
-                        <SortableHeader label="Reps" sortKey="reps" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
-                        <SortableHeader label="Muscle Group" sortKey="muscleGroup" {...{ onSort, currentSortBy: sortBy, currentDirection: sortDirection }} />
+                        {/* The SortableHeader component is correctly receiving currentSortBy/currentDirection */}
+                        <SortableHeader label="Date" sortKey="date" {...{ onSort, currentSortBy, currentDirection }} />
+                        <SortableHeader label="Exercise" sortKey="exercise" {...{ onSort, currentSortBy, currentDirection }} />
+                        <SortableHeader label="Set" sortKey="set" {...{ onSort, currentSortBy, currentDirection }} />
+                        <SortableHeader label="Weight (lbs)" sortKey="weightLbs" {...{ onSort, currentSortBy, currentDirection }} />
+                        <SortableHeader label="Reps" sortKey="reps" {...{ onSort, currentSortBy, currentDirection }} />
+                        <SortableHeader label="Muscle Group" sortKey="muscleGroup" {...{ onSort, currentSortBy, currentDirection }} />
                         
                         {/* Non-Sortable Headers */}
                         <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Notes</th>

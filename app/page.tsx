@@ -15,19 +15,32 @@ type SortDirection = 'asc' | 'desc';
 
 export default function Home() {
   const [workouts, setWorkouts] = useState<WorkoutEntry[]>(initialData);
-  // NEW State: Tracking sort settings
   const [sortBy, setSortBy] = useState<SortKey>('date'); 
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc'); 
 
   // Handlers for managing workout data
   const addWorkoutEntry = (newEntry: WorkoutEntry) => {
-    setWorkouts([newEntry, ...workouts]);
+    // Ensure new entry has a unique ID (simple time-based ID for now)
+    const newId = Date.now(); 
+    const entryWithId = { ...newEntry, id: newId };
+    setWorkouts([entryWithId, ...workouts]);
   };
   
+  // FIX: This handler is updated to ensure the item is replaced correctly.
   const updateWorkoutEntry = (indexToUpdate: number, updatedEntry: WorkoutEntry) => {
-    const updatedWorkouts = [...workouts];
-    updatedWorkouts[indexToUpdate] = updatedEntry;
-    setWorkouts(updatedWorkouts);
+    // The safest way is to map over the array and replace the item at the specific index.
+    // This relies on the index passed from the WorkoutTable being the index in the *sorted* array,
+    // which is then mapped back to the *original* state array order.
+    
+    setWorkouts(currentWorkouts => 
+        currentWorkouts.map((workout, index) => {
+            if (index === indexToUpdate) {
+                // Return the updated entry object, ensuring the new date/data is fully merged
+                return updatedEntry; 
+            }
+            return workout;
+        })
+    );
   };
   
   const deleteWorkoutEntry = (indexToDelete: number) => {
@@ -35,19 +48,17 @@ export default function Home() {
       setWorkouts(updatedWorkouts);
   };
 
-  // NEW: Handler for sorting the table
+  // Handler for sorting the table
   const handleSort = (key: SortKey) => {
     if (key === sortBy) {
-      // If same key is clicked, reverse direction
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      // If new key is clicked, set new key and default to descending
       setSortBy(key);
       setSortDirection('desc'); 
     }
   };
 
-  // Sorting Logic using useMemo (to prevent unnecessary recalculations)
+  // Sorting Logic (Includes Date Fix)
   const sortedWorkouts = useMemo(() => {
     if (!sortBy) return workouts;
 
@@ -56,14 +67,23 @@ export default function Home() {
     sorted.sort((a, b) => {
       const aValue = a[sortBy] as any;
       const bValue = b[sortBy] as any;
+
+      // Handle Date Sorting: Convert string dates to comparable timestamps
+      if (sortBy === 'date') {
+        const aDate = new Date(aValue).getTime();
+        const bDate = new Date(bValue).getTime();
+        
+        if (sortDirection === 'asc') return aDate - bDate;
+        return bDate - aDate;
+      }
       
-      // Handle numeric sorting (Weight, Reps, Set)
+      // Handle Numeric Sorting
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         if (sortDirection === 'asc') return aValue - bValue;
         return bValue - aValue;
       }
 
-      // Handle string/date sorting (Date, Exercise, Muscle Group). Crucially sorts by date correctly.
+      // Handle String Sorting
       const aString = String(aValue);
       const bString = String(bValue);
       
@@ -72,7 +92,7 @@ export default function Home() {
     });
 
     return sorted;
-  }, [workouts, sortBy, sortDirection]);
+  }, [workouts, sortBy, sortDirection]); 
 
 
   return (
@@ -95,10 +115,10 @@ export default function Home() {
               data={sortedWorkouts} // Pass the sorted data
               onUpdateSet={updateWorkoutEntry} 
               onDeleteSet={deleteWorkoutEntry}
-              // Pass the sorting state and handler
+              // Corrected prop names for sorting
               onSort={handleSort}
-              sortBy={sortBy}
-              sortDirection={sortDirection}
+              currentSortBy={sortBy}
+              currentDirection={sortDirection}
           /> 
       </section>
 
