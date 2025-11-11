@@ -216,17 +216,17 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
                         const uniqueId = `${workout.date}-${workout.exercise}-${workout.set}-${workout.weightLbs}`;
                         
                         return (
-                            <WorkoutRow 
-                                key={uniqueId} 
-                                entry={workout} 
-                                index={index} 
-                                uniqueId={uniqueId} // Pass uniqueId
-                                isEditing={editingIndex === uniqueId} // Check uniqueId for editing
-                                onEditStart={handleEditStart} 
-                                onEditSave={handleEditSave} 
-                                onEditCancel={handleEditCancel} 
-                                onDelete={onDeleteSet} 
-                            />
+              <WorkoutRow 
+                    key={uniqueId}
+                    entry={workout}
+                    index={index}
+                    uniqueId={uniqueId}
+                    isEditing={editingIndex === uniqueId}
+                    onEditStart={handleEditStart}
+                    onEditSave={handleEditSave}
+                    onEditCancel={handleEditCancel}
+                    onDelete={onDeleteSet}
+                    />
                         );
                     })}
                 </tbody>
