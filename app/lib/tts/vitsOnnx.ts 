@@ -1,0 +1,14 @@
+// app/lib/tts/vitsOnnx.ts
+// Placeholder for a future ONNX VITS text-to-speech model.
+// We'll load model files from /public/models/vits/* when you're ready
+// to ship a heavier offline voice.
+
+export async function speakWithVits(text: string): Promise<void> {
+  console.warn(
+    '[AI Coach] VITS/ONNX voice is not wired up yet. Using Web Speech instead.'
+  );
+  // In a future iteration, this function will:
+  // 1. Load ONNX model + tokenizer from /models/vits
+  // 2. Run inference in a WebWorker
+  // 3. Stream PCM audio to an AudioContext
+}

@@ -1,23 +1,65 @@
-// workoutData.ts
+// app/workoutData.ts
 
+// ---------------------------------------------------------------------
+// Data model for all workout entries
+// ---------------------------------------------------------------------
 export interface WorkoutEntry {
-  id: number; // <-- NEW: Unique ID is essential for stability
-  date: string; // e.g., '15-11-08'
-  exercise: string;
-  set: number;
-  weightLbs: number;
-  reps: number;
-  muscleGroup: 'Biceps' | 'Back' | 'Chest' | 'Legs' | 'Shoulders' | string;
-  notes: string;
+  id: number;                        // Unique row identifier
+  date: string;                      // e.g., "2025-11-08"
+  exercise: string;                  // Exercise name
+  set: number;                       // Set number
+  weightLbs: number;                 // Weight used
+  reps: number;                      // Repetitions
+  muscleGroup:
+    | 'Biceps'
+    | 'Back'
+    | 'Chest'
+    | 'Legs'
+    | 'Shoulders'
+    | string;                        // Flexible for new groups
+  notes: string;                     // Optional note per set
+  done?: boolean;                    // ✅ Marked done by user
+  doneAt?: string;                   // ISO timestamp when marked done
 }
 
-// Data from your initial Excel Sheet (Now with unique IDs)
+// ---------------------------------------------------------------------
+// Example seed data (from your original workout log)
+// ---------------------------------------------------------------------
 export const historicalWorkouts: WorkoutEntry[] = [
-  { id: 1, date: '15-11-08', exercise: 'Dumbbell Single Biceps Curl', set: 1, weightLbs: 15, reps: 10, muscleGroup: 'Biceps', notes: '' },
-  { id: 2, date: '15-11-08', exercise: 'Dumbbell Single Biceps Curl', set: 2, weightLbs: 17.5, reps: 10, muscleGroup: 'Biceps', notes: '' },
-  { id: 3, date: '15-11-08', exercise: 'Dumbbell Single Biceps Curl', set: 3, weightLbs: 17.5, reps: 10, muscleGroup: 'Biceps', notes: '' },
-  { id: 4, date: '15-11-08', exercise: 'Lat Pulldown', set: 1, weightLbs: 85, reps: 8, muscleGroup: 'Back', notes: '' },
-  { id: 5, date: '15-11-08', exercise: 'Lat Pulldown', set: 2, weightLbs: 85, reps: 10, muscleGroup: 'Back', notes: '' },
-  { id: 6, date: '15-11-08', exercise: 'Lat Pulldown', set: 3, weightLbs: 85, reps: 10, muscleGroup: 'Back', notes: '' },
-  { id: 7, date: '15-11-09', exercise: 'Dumbbell Bench Press', set: 1, weightLbs: 30, reps: 12, muscleGroup: 'Chest', notes: '' },
+  {
+    id: 1,
+    date: '2025-11-08',
+    exercise: 'Dumbbell Single Biceps Curl',
+    set: 1,
+    weightLbs: 15,
+    reps: 10,
+    muscleGroup: 'Biceps',
+    notes: '',
+    done: true,
+    doneAt: '2025-11-08T14:30:00Z',
+  },
+  {
+    id: 2,
+    date: '2025-11-08',
+    exercise: 'Dumbbell Single Biceps Curl',
+    set: 2,
+    weightLbs: 17.5,
+    reps: 10,
+    muscleGroup: 'Biceps',
+    notes: '',
+    done: true,
+    doneAt: '2025-11-08T14:34:00Z',
+  },
+  {
+    id: 3,
+    date: '2025-11-08',
+    exercise: 'Dumbbell Single Biceps Curl',
+    set: 3,
+    weightLbs: 17.5,
+    reps: 10,
+    muscleGroup: 'Biceps',
+    notes: '',
+    done: true,
+    doneAt: '2025-11-08T14:37:00Z',
+  },
 ];

@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { WorkoutEntry } from '../../workoutData';
-import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import {
+  FiEdit2,
+  FiTrash2,
+  FiChevronUp,
+  FiChevronDown,
+  FiCheckCircle,
+} from 'react-icons/fi';
 
-// Types for sorting state
 type SortKey = keyof WorkoutEntry | null;
 type SortDirection = 'asc' | 'desc';
 
-// --- Props ---
 interface WorkoutTableProps {
   data: WorkoutEntry[];
   onUpdateSet: (index: number, updatedEntry: WorkoutEntry) => void;
@@ -14,17 +18,19 @@ interface WorkoutTableProps {
   onSort: (key: SortKey) => void;
   currentSortBy: SortKey;
   currentDirection: SortDirection;
+  onMarkDone: (index: number) => void;
 }
 
 interface WorkoutRowProps {
   entry: WorkoutEntry;
-  uniqueId: number; // 🔴 use the numeric row id directly
+  uniqueId: number;
   index: number;
   isEditing: boolean;
-  onEditStart: (id: number, index: number) => void; // 🔴 id is number
+  onEditStart: (id: number, index: number) => void;
   onEditSave: (index: number, updatedEntry: WorkoutEntry) => void;
   onEditCancel: () => void;
   onDelete: (index: number) => void;
+  onDone: (index: number) => void;
 }
 
 // ----------------------------------------------------------------------
@@ -39,6 +45,7 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
   onEditSave,
   onEditCancel,
   onDelete,
+  onDone,
 }) => {
   const [editData, setEditData] = useState(entry);
 
@@ -64,31 +71,77 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
     return (
       <tr className="bg-yellow-50 border-b">
         <td className="p-2">
-          <input name="date" value={editData.date} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            name="date"
+            value={editData.date}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
         <td className="p-2">
-          <input name="exercise" value={editData.exercise} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            name="exercise"
+            value={editData.exercise}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
         <td className="p-2">
-          <input type="number" name="set" value={editData.set} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            type="number"
+            name="set"
+            value={editData.set}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
         <td className="p-2">
-          <input type="number" name="weightLbs" value={editData.weightLbs} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            type="number"
+            name="weightLbs"
+            value={editData.weightLbs}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
         <td className="p-2">
-          <input type="number" name="reps" value={editData.reps} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            type="number"
+            name="reps"
+            value={editData.reps}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
         <td className="p-2">
-          <input name="muscleGroup" value={editData.muscleGroup} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            name="muscleGroup"
+            value={editData.muscleGroup}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
         <td className="p-2">
-          <input name="notes" value={editData.notes} onChange={handleChange} className="w-full text-sm p-1 border rounded" />
+          <input
+            name="notes"
+            value={editData.notes}
+            onChange={handleChange}
+            className="w-full text-sm p-1 border rounded"
+          />
         </td>
+        {/* empty Done + Edit/Delete cols while editing */}
+        <td className="p-2" />
         <td className="p-2 flex space-x-2">
-          <button onClick={() => onEditSave(index, editData)} className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded text-xs">
+          <button
+            onClick={() => onEditSave(index, editData)}
+            className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded text-xs"
+          >
             Save
           </button>
-          <button onClick={onEditCancel} className="text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded text-xs">
+          <button
+            onClick={onEditCancel}
+            className="text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded text-xs"
+          >
             Cancel
           </button>
         </td>
@@ -100,7 +153,9 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
   return (
     <tr className="border-b hover:bg-gray-50 transition-colors duration-150">
       <td className="p-3 text-sm font-medium text-gray-900">{entry.date}</td>
-      <td className="p-3 text-sm font-bold text-indigo-600">{entry.exercise}</td>
+      <td className="p-3 text-sm font-bold text-indigo-600">
+        {entry.exercise}
+      </td>
       <td className="p-3 text-sm text-gray-500">{entry.set || 1}</td>
       <td className="p-3 text-sm text-gray-900">{entry.weightLbs} lbs</td>
       <td className="p-3 text-sm text-gray-500">{entry.reps}</td>
@@ -109,7 +164,19 @@ const WorkoutRow: React.FC<WorkoutRowProps> = ({
           {entry.muscleGroup}
         </span>
       </td>
-      <td className="p-3 text-sm text-gray-500 italic">{entry.notes || '-'}</td>
+      <td className="p-3 text-sm text-gray-500 italic">
+        {entry.notes || '-'}
+      </td>
+      <td className="p-3 text-sm text-gray-500">
+        <button
+          onClick={() => onDone(index)}
+          className="text-gray-400 hover:text-green-600 transition-colors"
+          aria-label="Mark done"
+          title="Mark done"
+        >
+          <FiCheckCircle size={16} />
+        </button>
+      </td>
       <td className="p-3 text-sm text-gray-500">
         <button
           onClick={() => onEditStart(uniqueId, index)}
@@ -145,8 +212,15 @@ const SortableHeader: React.FC<{
   const isSorted = currentSortBy === sortKey;
 
   const renderSortIcon = () => {
-    if (!isSorted) return <FiChevronUp size={14} className="opacity-0 group-hover:opacity-50 transition-opacity" />;
-    if (currentDirection === 'asc') return <FiChevronUp size={14} className="text-indigo-600" />;
+    if (!isSorted)
+      return (
+        <FiChevronUp
+          size={14}
+          className="opacity-0 group-hover:opacity-50 transition-opacity"
+        />
+      );
+    if (currentDirection === 'asc')
+      return <FiChevronUp size={14} className="text-indigo-600" />;
     return <FiChevronDown size={14} className="text-indigo-600" />;
   };
 
@@ -164,7 +238,7 @@ const SortableHeader: React.FC<{
 };
 
 // ----------------------------------------------------------------------
-// 3) Table (uses id for edit state + key)
+// 3) Table
 // ----------------------------------------------------------------------
 const WorkoutTable: React.FC<WorkoutTableProps> = ({
   data,
@@ -173,11 +247,12 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
   onSort,
   currentSortBy,
   currentDirection,
+  onMarkDone,
 }) => {
-  const [editingId, setEditingId] = useState<number | null>(null); // 🔴 id is number now
-  const [editingData, setEditingData] = useState<WorkoutEntry | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [, setEditingData] = useState<WorkoutEntry | null>(null);
 
-  const handleEditStart = (id: number, index: number) => { // 🔴 id: number
+  const handleEditStart = (id: number, index: number) => {
     setEditingId(id);
     setEditingData(data[index]);
   };
@@ -194,31 +269,52 @@ const WorkoutTable: React.FC<WorkoutTableProps> = ({
       <table className="min-w-full divide-y divide-gray-200">
         <thead>
           <tr className="bg-gray-100">
-            <SortableHeader label="Date"         sortKey="date"        {...{ onSort, currentSortBy, currentDirection }} />
-            <SortableHeader label="Exercise"     sortKey="exercise"    {...{ onSort, currentSortBy, currentDirection }} />
-            <SortableHeader label="Set"          sortKey="set"         {...{ onSort, currentSortBy, currentDirection }} />
-            <SortableHeader label="Weight (lbs)" sortKey="weightLbs"   {...{ onSort, currentSortBy, currentDirection }} />
-            <SortableHeader label="Reps"         sortKey="reps"        {...{ onSort, currentSortBy, currentDirection }} />
-            <SortableHeader label="Muscle Group" sortKey="muscleGroup" {...{ onSort, currentSortBy, currentDirection }} />
-            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Notes</th>
-            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Edit</th>
-            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Del</th>
+            {[
+              { label: 'Date', sortKey: 'date' as SortKey },
+              { label: 'Exercise', sortKey: 'exercise' as SortKey },
+              { label: 'Set', sortKey: 'set' as SortKey },
+              { label: 'Weight (lbs)', sortKey: 'weightLbs' as SortKey },
+              { label: 'Reps', sortKey: 'reps' as SortKey },
+              { label: 'Muscle Group', sortKey: 'muscleGroup' as SortKey },
+            ].map(col => (
+              <SortableHeader
+                key={col.label}
+                label={col.label}
+                sortKey={col.sortKey}
+                currentSortBy={currentSortBy}
+                currentDirection={currentDirection}
+                onSort={onSort}
+              />
+            ))}
+            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+              Notes
+            </th>
+            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+              Done
+            </th>
+            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+              Edit
+            </th>
+            <th className="p-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+              Del
+            </th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {data.map((workout, index) => {
-            const uniqueId = workout.id; // 🔴 single source of truth
+            const uniqueId = workout.id;
             return (
               <WorkoutRow
-                key={uniqueId} // 🔴 stable key
+                key={uniqueId}
                 entry={workout}
                 index={index}
                 uniqueId={uniqueId}
-                isEditing={editingId === uniqueId} // 🔴 only this row edits
+                isEditing={editingId === uniqueId}
                 onEditStart={handleEditStart}
                 onEditSave={handleEditSave}
                 onEditCancel={handleEditCancel}
                 onDelete={onDeleteSet}
+                onDone={onMarkDone}
               />
             );
           })}

@@ -1,0 +1,47 @@
+// app/lib/useVoiceCoach.ts
+import { useCallback, useState } from 'react';
+import {
+  speakWithWebSpeech,
+  cancelWebSpeech,
+  canUseWebSpeech,
+  getIsSpeaking,
+} from './tts/webSpeech';
+
+// 🐛 FIX: Removed 'export' from here. It is now only exported as the default below.
+function useVoiceCoach() {
+  const [supported] = useState<boolean>(() => canUseWebSpeech());
+  const [speaking, setSpeaking] = useState<boolean>(false);
+
+  const speak = useCallback(
+    (text: string) => {
+      if (!supported) {
+        console.warn('[AI Coach] Voice not supported in this browser.');
+        return;
+      }
+      speakWithWebSpeech(text, {
+        rate: 1.0,
+        pitch: 1.0,
+        volume: 1.0,
+      });
+      setSpeaking(true);
+
+      const interval = window.setInterval(() => {
+        if (!getIsSpeaking()) {
+          setSpeaking(false);
+          window.clearInterval(interval);
+        }
+      }, 300);
+    },
+    [supported]
+  );
+
+  const stop = useCallback(() => {
+    cancelWebSpeech();
+    setSpeaking(false);
+  }, []);
+
+  return { supported, speaking, speak, stop };
+}
+
+// ✅ default export
+export default useVoiceCoach;
