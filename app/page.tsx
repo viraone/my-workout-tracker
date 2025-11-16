@@ -39,23 +39,41 @@ type PlanResponse = {
 export default function Home() {
   
 const [workouts, setWorkouts] = useState<WorkoutEntry[]>(() => {
+  // 1) Start with either saved data or initialData
+  let base: WorkoutEntry[] = initialData;
+
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        base = JSON.parse(saved);
+      } catch {
+        base = initialData;
+      }
+    }
   }
 
-  // No saved data → seed with historical + today's AI Plan rows
+  // 2) Build today’s AI rows ONLY if they aren’t already there
   const todayStr = new Date().toISOString().slice(0, 10); // e.g. "2025-11-16"
 
-  // Make sure IDs stay unique and continue from the last historical id
-  const maxId = initialData.length
-    ? Math.max(...initialData.map((w) => w.id))
-    : 0;
+  const planExerciseNames = new Set(todaysAiPlan.map((p) => p.name));
 
+  const hasTodayPlanRows = base.some(
+    (w) => w.date === todayStr && planExerciseNames.has(w.exercise)
+  );
+
+  if (hasTodayPlanRows) {
+    // We already have AI entries for today in storage → just use them
+    return base;
+  }
+
+  // 3) Otherwise, append fresh AI rows for today
+  const maxId = base.length ? Math.max(...base.map((w) => w.id)) : 0;
   const aiRows = createEntriesFromAiPlan(todaysAiPlan, todayStr, maxId + 1);
 
-  return [...initialData, ...aiRows];
+  return [...base, ...aiRows];
 });
+
 
 
   const [sortBy, setSortBy] = useState<SortKey>('date');
