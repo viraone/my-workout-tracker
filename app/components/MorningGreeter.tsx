@@ -1,9 +1,13 @@
 // app/components/MorningGreeter.tsx
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { WorkoutEntry } from '../../workoutData';
-import { summarizeLastDay, buildMorningScript } from '../lib/morningScript';
+import {
+  summarizeLastDay,
+  buildMorningScript,
+  type TodayPlan,
+} from '../lib/morningScript';
 
 // ------------------------------------------------------------------
 // Voice hook with browser (system) voices
@@ -15,7 +19,7 @@ const useVoiceCoach = () => {
   const [selectedVoice, setSelectedVoice] = useState<string>('');
   const utteranceRef = React.useRef<SpeechSynthesisUtterance | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const isSupported =
       typeof window !== 'undefined' && 'speechSynthesis' in window;
 
@@ -28,7 +32,7 @@ const useVoiceCoach = () => {
 
       // Pick a nicer default if none chosen yet
       if (!selectedVoice && v.length > 0) {
-        const nicer = v.find(voice =>
+        const nicer = v.find((voice) =>
           /Samantha|Ava|Daniel|Moira|Karen|Tessa|Serena|Victoria/i.test(
             voice.name
           )
@@ -61,7 +65,7 @@ const useVoiceCoach = () => {
 
     // Attach chosen voice
     if (selectedVoice && voices.length) {
-      const voiceObj = voices.find(v => v.name === selectedVoice);
+      const voiceObj = voices.find((v) => v.name === selectedVoice);
       if (voiceObj) u.voice = voiceObj;
     }
 
@@ -98,20 +102,13 @@ const useVoiceCoach = () => {
 // ------------------------------------------------------------------
 // Types
 // ------------------------------------------------------------------
-type RecommendationResponse = {
-  plan: {
-    group: string;
-    items: { exercise: string; sets: number; reps: string }[];
-    cue: string;
-  };
-};
-
 interface MorningGreeterProps {
   workouts: WorkoutEntry[];
   userName?: string;
+  todayPlan?: TodayPlan | null; // 🔥 GPT plan passed from the page
 }
 
-// OpenAI voice ids
+// OpenAI voice ids (for your /api/voice endpoint)
 const OPENAI_VOICES = [
   { id: 'alloy', label: 'Alloy (balanced)' },
   { id: 'nova', label: 'Nova (energetic)' },
@@ -128,6 +125,7 @@ type OpenAIVoiceId = (typeof OPENAI_VOICES)[number]['id'];
 const MorningGreeter: React.FC<MorningGreeterProps> = ({
   workouts,
   userName = 'Viradeth',
+  todayPlan = null,
 }) => {
   const {
     supported,
@@ -144,50 +142,16 @@ const MorningGreeter: React.FC<MorningGreeterProps> = ({
   const [cloudVoice, setCloudVoice] = useState<OpenAIVoiceId>('alloy');
   const [voiceLoading, setVoiceLoading] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [todayGroup, setTodayGroup] = useState<string | null>(null);
-
   const lastDay = useMemo(() => summarizeLastDay(workouts), [workouts]);
+  const todayGroup = todayPlan?.group ?? null;
 
-  // 🔁 Call /api/recommend whenever workouts change
-  useEffect(() => {
-    const fetchRecommendation = async () => {
-      if (!workouts.length) return;
-
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch('/api/recommend', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ history: workouts }),
-        });
-
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          console.error('recommend error', body);
-          throw new Error(body.error || 'Failed to get recommendation');
-        }
-
-        const data: RecommendationResponse = await res.json();
-        setTodayGroup(data.plan.group);
-      } catch (e: any) {
-        console.error(e);
-        setError(e.message || 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRecommendation();
-  }, [workouts]);
-
+  // Script now includes TODAY'S PLAN (group + 3 exercises + cue)
   const script = useMemo(
-    () => buildMorningScript(userName, lastDay, todayGroup ?? undefined),
-    [userName, lastDay, todayGroup]
+    () => buildMorningScript(userName, lastDay, todayPlan ?? undefined),
+    [userName, lastDay, todayPlan]
   );
 
+  // Short line shown in the UI under "AI Coach"
   const whyLine = useMemo(() => {
     if (!lastDay.date)
       return 'No workout history yet — let’s start building it today.';
@@ -266,14 +230,10 @@ const MorningGreeter: React.FC<MorningGreeterProps> = ({
             Good morning, {userName}! ☀️
           </div>
           <p className="text-sm text-gray-700 mt-1">{whyLine}</p>
-          {loading && (
-            <p className="text-xs text-gray-400 mt-1">
-              Updating today&apos;s plan…
-            </p>
-          )}
-          {error && (
-            <p className="text-xs text-red-500 mt-1">
-              Recommendation error: {error}
+          {todayPlan && (
+            <p className="text-xs text-gray-500 mt-1">
+              Today&apos;s focus:{' '}
+              <span className="font-semibold">{todayPlan.group}</span>
             </p>
           )}
         </div>
@@ -310,10 +270,10 @@ const MorningGreeter: React.FC<MorningGreeterProps> = ({
           {voiceMode === 'browser' && supported && voices.length > 0 && (
             <select
               value={selectedVoice}
-              onChange={e => setSelectedVoice(e.target.value)}
+              onChange={(e) => setSelectedVoice(e.target.value)}
               className="border border-gray-300 rounded-lg px-2 py-1 text-xs sm:text-sm max-w-[200px] truncate"
             >
-              {voices.map(v => (
+              {voices.map((v) => (
                 <option key={v.name} value={v.name}>
                   {v.name}
                   {v.lang && !v.lang.startsWith('en')
@@ -327,10 +287,12 @@ const MorningGreeter: React.FC<MorningGreeterProps> = ({
           {voiceMode === 'openai' && (
             <select
               value={cloudVoice}
-              onChange={e => setCloudVoice(e.target.value as OpenAIVoiceId)}
+              onChange={(e) =>
+                setCloudVoice(e.target.value as OpenAIVoiceId)
+              }
               className="border border-gray-300 rounded-lg px-2 py-1 text-xs sm:text-sm max-w-[200px]"
             >
-              {OPENAI_VOICES.map(v => (
+              {OPENAI_VOICES.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
                 </option>
