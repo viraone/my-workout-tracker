@@ -18,8 +18,74 @@ export interface WorkoutEntry {
     | 'Shoulders'
     | string;                        // Flexible for new groups
   notes: string;                     // Optional note per set
-  done?: boolean;                    // ✅ Marked done by user
+  done?: boolean;                    // Marked done by user
   doneAt?: string;                   // ISO timestamp when marked done
+}
+
+// ---------------------------------------------------------------------
+// AI Plan model (what the coach suggests for the day)
+// ---------------------------------------------------------------------
+export interface AiPlanExercise {
+  name: string;
+  sets: number;
+  targetReps: string; // e.g. "8–12"
+  muscleGroup: WorkoutEntry['muscleGroup'];
+  notes: string;
+}
+
+// Example: today's AI Plan (Chest day)
+export const todaysAiPlan: AiPlanExercise[] = [
+  {
+    name: 'Dumbbell Bench Press',
+    sets: 3,
+    targetReps: '8–12',
+    muscleGroup: 'Chest',
+    notes: 'Controlled tempo, slight pause on chest.',
+  },
+  {
+    name: 'Incline DB Press',
+    sets: 3,
+    targetReps: '10–12',
+    muscleGroup: 'Chest',
+    notes: "Don’t flare the elbows.",
+  },
+  {
+    name: 'Cable Fly',
+    sets: 3,
+    targetReps: '12–15',
+    muscleGroup: 'Chest',
+    notes: 'Slow stretch and squeeze.',
+  },
+];
+
+// ---------------------------------------------------------------------
+// Helper: turn AI Plan into WorkoutEntry rows for the Exercise Table
+// ---------------------------------------------------------------------
+export function createEntriesFromAiPlan(
+  plan: AiPlanExercise[],
+  date: string,
+  startingId: number
+): WorkoutEntry[] {
+  const rows: WorkoutEntry[] = [];
+  let id = startingId;
+
+  for (const ex of plan) {
+    for (let set = 1; set <= ex.sets; set++) {
+      rows.push({
+        id: id++,
+        date,
+        exercise: ex.name,
+        set,
+        weightLbs: 0,        // user will fill this in
+        reps: 0,             // user will fill this in
+        muscleGroup: ex.muscleGroup,
+        notes: ex.notes,
+        done: false,
+      });
+    }
+  }
+
+  return rows;
 }
 
 // ---------------------------------------------------------------------

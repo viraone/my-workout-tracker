@@ -5,10 +5,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import WorkoutTable from './components/WorkoutTable';
 import WorkoutForm from './components/WorkoutForm';
 import MorningGreeter from './components/MorningGreeter';
+
 import {
   historicalWorkouts as initialData,
   WorkoutEntry,
+  todaysAiPlan,
+  createEntriesFromAiPlan,
 } from '../workoutData';
+
 
 // sorting state types
 type SortKey = keyof WorkoutEntry | null;
@@ -33,14 +37,26 @@ type PlanResponse = {
 };
 
 export default function Home() {
-  // 1) state init with localStorage fallback
-  const [workouts, setWorkouts] = useState<WorkoutEntry[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialData;
-  });
+  
+const [workouts, setWorkouts] = useState<WorkoutEntry[]>(() => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  }
+
+  // No saved data → seed with historical + today's AI Plan rows
+  const todayStr = new Date().toISOString().slice(0, 10); // e.g. "2025-11-16"
+
+  // Make sure IDs stay unique and continue from the last historical id
+  const maxId = initialData.length
+    ? Math.max(...initialData.map((w) => w.id))
+    : 0;
+
+  const aiRows = createEntriesFromAiPlan(todaysAiPlan, todayStr, maxId + 1);
+
+  return [...initialData, ...aiRows];
+});
+
 
   const [sortBy, setSortBy] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -249,25 +265,24 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Form */}
-      <section className="max-w-6xl mx-auto mb-10">
-        <WorkoutForm onAddSet={addWorkoutEntry} />
-      </section>
-
       {/* Historical workout table */}
       <section className="max-w-6xl mx-auto mt-4">
-<WorkoutTable
-  data={sortedWorkouts}
-  onUpdateSet={updateWorkoutEntry}
-  onDeleteSet={deleteWorkoutEntry}
-  onSort={handleSort}
-  currentSortBy={sortBy}
-  currentDirection={sortDirection}
-  onMarkDone={markDone}
-  todayPlan={todayPlan}   // 👈 NEW: AI coach plan for today
-/>
-
+        <WorkoutTable
+          data={sortedWorkouts}
+          onUpdateSet={updateWorkoutEntry}
+          onDeleteSet={deleteWorkoutEntry}
+          onSort={handleSort}
+          currentSortBy={sortBy}
+          currentDirection={sortDirection}
+          onMarkDone={markDone}
+        />
       </section>
+
+{/* Form */}
+<section className="max-w-6xl mx-auto mt-8 mb-10">
+  <WorkoutForm onAddSet={addWorkoutEntry} />
+</section>
+    
     </main>
   );
 }
