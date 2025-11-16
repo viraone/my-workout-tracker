@@ -48,16 +48,37 @@ export function buildMorningScript(
 ): string {
   const pieces: string[] = [];
 
-  // Greeting only
   pieces.push(`Good morning, ${name}.`);
 
-  // Optional: VERY short mention of focus (no “because you trained…” logic)
-  if (todayPlan) {
-    pieces.push(`Today’s focus is ${todayPlan.group}.`);
+  if (lastDay.date) {
+    const groups = lastDay.muscleGroups.join(' and ');
+    const exercises = lastDay.exercises.join(', ');
+    pieces.push(
+      `Yesterday, on ${lastDay.date}, you trained ${groups} with exercises like ${exercises}.`
+    );
+  } else {
+    pieces.push(`We don't have any logged workouts yet.`);
   }
 
-  pieces.push(`Let’s have a great workout.`);
+  if (todayPlan) {
+    pieces.push(`Today we're focusing on ${todayPlan.group}.`);
+
+    if (todayPlan.items.length > 0) {
+      const lines = todayPlan.items.map((it, idx) => {
+        const n = idx + 1;
+        return `Exercise ${n}: ${it.exercise}, ${it.sets} sets of ${it.reps}.`;
+      });
+      pieces.push(lines.join(' '));
+    }
+
+    if (todayPlan.cue) {
+      pieces.push(todayPlan.cue);
+    }
+  }
+
+  pieces.push(`Let's have a great workout.`);
 
   return pieces.join(' ');
 }
+
 
