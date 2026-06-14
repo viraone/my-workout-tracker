@@ -1,0 +1,30 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build iOS App (Simulator)",
+            "type": "shell",
+            "command": "xcodebuild -project calendarWorkOutApp.xcodeproj -scheme calendarWorkOutApp -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "detail": "Build the workout app for the iOS Simulator using xcodebuild."
+        },
+        {
+            "label": "Run iOS Simulator",
+            "type": "shell",
+            "command": "xcrun simctl boot 'iPhone 15' || true && open /Applications/Xcode.app/Contents/Developer/Applications/Simulator.app",
+            "problemMatcher": [],
+            "detail": "Boot and open the standard iOS Simulator."
+        },
+        {
+            "label": "Install & Launch App in Simulator",
+            "type": "shell",
+            "command": "xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/calendarWorkOutApp-*/Build/Products/Debug-iphonesimulator/calendarWorkOutApp.app && xcrun simctl launch booted calendarWorkOutApp",
+            "problemMatcher": [],
+            "detail": "Install and run the newly built app binary on the active simulator."
+        }
+    ]
+}

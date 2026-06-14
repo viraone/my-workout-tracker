@@ -1,0 +1,14 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/calendarWorkOutApp.xcodeproj/xcuserdata": true,
+        "**/calendarWorkOutApp.xcodeproj/project.xcworkspace/xcuserdata": true
+    },
+    "search.exclude": {
+        "**/calendarWorkOutApp.xcodeproj": true
+    },
+    "swift.autoGenerateLaunchConfigurations": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+}
