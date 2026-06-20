@@ -14,12 +14,16 @@ struct WorkoutLogSheet: View {
     
     let defaultDate: Date
     let editingWorkout: WorkoutSession?
+    let draftWorkoutID: UUID
     @State private var title: String = ""
     @State private var category: WorkoutCategory = .strength
     @State private var date: Date
     @State private var durationMinutes: Int = 45
     @State private var notes: String = ""
     @State private var exercises: [Exercise] = []
+    @State private var expandedExerciseIDs: Set<UUID> = []
+    @State private var removedExerciseIDs: Set<UUID> = []
+    @State private var isSaving = false
     
     // Exercise input state
     @State private var newExerciseName: String = ""
@@ -473,9 +477,14 @@ struct WorkoutLogSheet: View {
             .map { $0.0 }
     }
     
-    init(defaultDate: Date, editingWorkout: WorkoutSession? = nil) {
+    init(
+        defaultDate: Date,
+        editingWorkout: WorkoutSession? = nil,
+        draftWorkoutID: UUID = UUID()
+    ) {
         self.defaultDate = defaultDate
         self.editingWorkout = editingWorkout
+        self.draftWorkoutID = draftWorkoutID
         
         if let editing = editingWorkout {
             _title = State(initialValue: editing.title)
@@ -484,18 +493,21 @@ struct WorkoutLogSheet: View {
             _durationMinutes = State(initialValue: editing.durationMinutes)
             _notes = State(initialValue: editing.notes)
             
-            var filteredExercises = editing.exercises.filter { $0.name != "Calf Raises" && $0.name != "Leg raises" }
-            for i in 0..<filteredExercises.count {
-                if filteredExercises[i].name == "Dumbbell Lunges" || filteredExercises[i].name == "Squats" {
-                    filteredExercises[i].name = ""
+            var seenExerciseNames = Set<String>()
+            let editableExercises = editing.exercises.compactMap { exercise -> Exercise? in
+                let normalizedExercise = Self.normalizeExerciseForEntry(exercise)
+                let normalizedName = Self.normalizedExerciseNameForComparison(normalizedExercise.name)
+                guard !normalizedName.isEmpty,
+                      seenExerciseNames.insert(normalizedName).inserted else {
+                    return nil
                 }
+                return normalizedExercise
             }
-            _exercises = State(initialValue: filteredExercises)
+            _exercises = State(initialValue: editableExercises)
+            _expandedExerciseIDs = State(initialValue: Set(editableExercises.map(\.id)))
         } else {
             _date = State(initialValue: defaultDate)
-            _exercises = State(initialValue: [
-                Exercise(name: "", sets: [ExerciseSet(weight: 0, reps: 10)])
-            ])
+            _exercises = State(initialValue: [])
         }
     }
     
@@ -504,155 +516,31 @@ struct WorkoutLogSheet: View {
             Form {
                 Section(header: Text("WORKOUT DETAILS").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.6))) {
                     DatePicker("Date", selection: $date, displayedComponents: [.date])
-                    
-                    Stepper(value: $durationMinutes, in: 5...300, step: 5) {
-                        HStack {
-                            Text("Duration:")
-                            Text("\(durationMinutes) mins")
-                                .fontWeight(.bold)
-                                .foregroundColor(category.color)
-                        }
-                    }
                 }
                 .listRowBackground(Color.white.opacity(0.08))
                 
                 Section(header: Text("EXERCISES").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.6))) {
-                    // Quick-add Exercise interface (Search & Suggestions section sits right ABOVE active logged exercises)
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            TextField("Exercise name...", text: $newExerciseName)
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .textFieldStyle(.plain)
-                                .foregroundStyle(.white)
-                                .padding(.vertical, 6)
-                            
-                            Button(action: addNewExercise) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 22))
-                                    .foregroundStyle(category.color)
-                            }
-                            .disabled(newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        
-                        // Intelligent fuzzy suggestions list
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(filteredSuggestions, id: \.self) { sug in
-                                    Button(action: {
-                                        newExerciseName = sug
-                                    }) {
-                                        Text(sug)
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(category.color.opacity(0.15))
-                                            .cornerRadius(20)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 20)
-                                                    .stroke(category.color.opacity(0.3), lineWidth: 1)
-                                            )
-                                            .foregroundStyle(.white)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                    .padding(.vertical, 8)
+                    VStack(alignment: .leading, spacing: 14) {
+                        exercisePicker
 
-                    // Active logged exercise sets section (at the bottom)
-                    if exercises.isEmpty {
-                        Text("No exercises added yet.")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .padding(.vertical, 8)
-                    } else {
-                        ForEach($exercises) { $exercise in
-                            VStack(alignment: .leading, spacing: 8) {
-                                // Sets list
-                                ForEach($exercise.sets) { $set in
-                                    HStack(spacing: 12) {
-                                        Text("Set")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(.white.opacity(0.5))
-                                        
-                                        TextField("Lbs", value: $set.weight, formatter: NumberFormatter())
-                                            .keyboardType(.decimalPad)
-                                            .frame(width: 60)
-                                            .textFieldStyle(.plain)
-                                            .multilineTextAlignment(.center)
-                                            .foregroundColor(.white)
-                                            .padding(6)
-                                            .background(Color.white.opacity(0.12))
-                                            .cornerRadius(6)
-                                        
-                                        Text("lbs")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.white.opacity(0.5))
-                                        
-                                        TextField("Reps", value: $set.reps, formatter: NumberFormatter())
-                                            .keyboardType(.numberPad)
-                                            .frame(width: 50)
-                                            .textFieldStyle(.plain)
-                                            .multilineTextAlignment(.center)
-                                            .foregroundColor(.white)
-                                            .padding(6)
-                                            .background(Color.white.opacity(0.12))
-                                            .cornerRadius(6)
-                                        
-                                        Text("reps")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.white.opacity(0.5))
-                                        
-                                        Spacer()
-                                        
-                                        Button(action: {
-                                            set.isCompleted.toggle()
-                                        }) {
-                                            Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                                                .font(.system(size: 20))
-                                                .foregroundStyle(set.isCompleted ? category.color : .white.opacity(0.4))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.leading, 8)
-                                }
-                                
-                                HStack {
-                                    Button(action: {
-                                        let lastWeight = exercise.sets.last?.weight ?? 0
-                                        let lastReps = exercise.sets.last?.reps ?? 10
-                                        exercise.sets.append(ExerciseSet(weight: lastWeight, reps: lastReps))
-                                    }) {
-                                        Label("Add Set", systemImage: "plus")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(category.color)
-                                    }
-                                    .buttonStyle(.borderless)
-                                    
-                                    Spacer()
-                                    
-                                    if exercise.sets.count > 1 {
-                                        Button(action: {
-                                            if !exercise.sets.isEmpty {
-                                                _ = exercise.sets.popLast()
-                                            }
-                                        }) {
-                                            Text("Remove Set")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundStyle(.red.opacity(0.8))
-                                        }
-                                        .buttonStyle(.borderless)
-                                    }
-                                }
-                                .padding(.top, 4)
+                        if exercises.isEmpty {
+                            Text("No exercises yet")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(16)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        } else {
+                            ForEach($exercises) { $exercise in
+                                exerciseCard(exercise: $exercise)
                             }
-                            .padding(.vertical, 6)
                         }
                     }
+                    .padding(.vertical, 4)
                 }
-                .listRowBackground(Color.white.opacity(0.08))
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowBackground(Color.clear)
                 
                 Section(header: Text("NOTES").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.6))) {
                     TextField("Any session notes, feelings, or details...", text: $notes, axis: .vertical)
@@ -668,56 +556,501 @@ struct WorkoutLogSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(.white.opacity(0.8))
+                        .disabled(isSaving)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveWorkoutSession()
+                    Button {
+                        Task {
+                            await saveWorkoutSession()
+                        }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .tint(category.color)
+                        } else {
+                            Text("Save")
+                        }
                     }
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(category.color)
+                    .disabled(isSaving)
                 }
             }
             .preferredColorScheme(.dark)
+            .alert(
+                "Workout Sync Error",
+                isPresented: Binding(
+                    get: { workoutManager.errorMessage != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            DispatchQueue.main.async {
+                                workoutManager.clearError()
+                            }
+                        }
+                    }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    workoutManager.clearError()
+                }
+            } message: {
+                Text(workoutManager.errorMessage ?? "The workout could not be saved.")
+            }
+        }
+    }
+
+    private var exercisePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                TextField("Exercise name...", text: $newExerciseName)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(.white)
+                    .submitLabel(.done)
+                    .onSubmit(addNewExercise)
+
+                Button(action: addNewExercise) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(category.color)
+                        .clipShape(Circle())
+                }
+                .disabled(newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+                .buttonStyle(.plain)
+            }
+            .padding(14)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(filteredSuggestions.prefix(8), id: \.self) { suggestion in
+                        Button {
+                            addExercise(named: suggestion)
+                        } label: {
+                            Text(suggestion)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(category.color.opacity(0.14))
+                                .foregroundStyle(.white)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(category.color.opacity(0.35), lineWidth: 1)
+                                )
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func exerciseCard(exercise: Binding<Exercise>) -> some View {
+        let exerciseID = exercise.wrappedValue.id
+        let displayName = exerciseDisplayName(exercise.wrappedValue.name)
+        let isExpanded = expandedExerciseIDs.contains(exerciseID)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Button {
+                    toggleExerciseExpansion(exerciseID)
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(displayName)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text(lastSessionText(for: displayName) ?? compactSetSummary(for: exercise.wrappedValue))
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.48))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    removeExercise(exerciseID)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    toggleExerciseExpansion(exerciseID)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Circle())
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if isExpanded {
+                Divider()
+                    .background(Color.white.opacity(0.12))
+
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(exercise.wrappedValue.sets.indices), id: \.self) { setIndex in
+                        exerciseSetRow(exercise: exercise, setIndex: setIndex)
+
+                        if setIndex != exercise.wrappedValue.sets.indices.last {
+                            Divider()
+                                .background(Color.white.opacity(0.08))
+                        }
+                    }
+                }
+
+                Divider()
+                    .background(Color.white.opacity(0.12))
+
+                Button {
+                    appendSet(to: exercise)
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16, weight: .bold))
+                        Text("Add Set")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(category.color.opacity(0.16))
+                    .foregroundStyle(category.color)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(18)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: isExpanded)
+    }
+
+    private func exerciseSetRow(exercise: Binding<Exercise>, setIndex: Int) -> some View {
+        let set = Binding<ExerciseSet>(
+            get: {
+                guard exercise.wrappedValue.sets.indices.contains(setIndex) else {
+                    return ExerciseSet(weight: 0, reps: 0)
+                }
+                return exercise.wrappedValue.sets[setIndex]
+            },
+            set: { newValue in
+                guard exercise.wrappedValue.sets.indices.contains(setIndex) else { return }
+                exercise.wrappedValue.sets[setIndex] = newValue
+            }
+        )
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text("Set \(setIndex + 1)")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Button {
+                    var updatedSet = set.wrappedValue
+                    updatedSet.isCompleted.toggle()
+                    set.wrappedValue = updatedSet
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: set.wrappedValue.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 17, weight: .semibold))
+                        Text("Complete")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(set.wrappedValue.isCompleted ? category.color : .white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+
+                if exercise.wrappedValue.sets.count > 1 {
+                    Button {
+                        removeSet(from: exercise, at: setIndex)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.red.opacity(0.75))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(spacing: 12) {
+                metricInput(title: "Weight", value: set.weight, unit: "lbs", formatter: weightFormatter)
+
+                metricInput(title: "Reps", value: set.reps, unit: "reps", formatter: repsFormatter)
+            }
+        }
+    }
+
+    private func metricInput<Value>(
+        title: String,
+        value: Binding<Value>,
+        unit: String,
+        formatter: NumberFormatter
+    ) -> some View where Value: Numeric {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.4))
+
+            HStack(spacing: 6) {
+                TextField("0", value: value, formatter: formatter)
+                    .keyboardType(title == "Weight" ? .decimalPad : .numberPad)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(minWidth: 54)
+
+                Text(unit)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.48))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.09))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
     
     private func addNewExercise() {
-        let name = newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        addExercise(named: newExerciseName)
+    }
+
+    private func addExercise(named rawName: String) {
+        let name = trimmedExerciseName(rawName)
         guard !name.isEmpty else { return }
-        
-        let newExercise = Exercise(name: name, sets: [
-            ExerciseSet(weight: 0, reps: 10)
-        ])
+
+        if let existingExercise = exercises.first(where: {
+            normalizedExerciseName($0.name) == normalizedExerciseName(name)
+        }) {
+            expandedExerciseIDs.insert(existingExercise.id)
+            newExerciseName = ""
+            return
+        }
+
+        let newExercise = Exercise(name: name, sets: defaultSets(for: name))
         exercises.append(newExercise)
+        expandedExerciseIDs.insert(newExercise.id)
         newExerciseName = ""
     }
+
+    private func exerciseExists(named name: String, in exercises: [Exercise]? = nil) -> Bool {
+        let normalizedName = normalizedExerciseName(name)
+        guard !normalizedName.isEmpty else { return false }
+
+        return (exercises ?? self.exercises).contains {
+            normalizedExerciseName($0.name) == normalizedName
+        }
+    }
+
+    private func trimmedExerciseName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedExerciseName(_ name: String) -> String {
+        Self.normalizedExerciseNameForComparison(name)
+    }
+
+    private func appendSet(to exercise: Binding<Exercise>) {
+        let templateSet = exercise.wrappedValue.sets.last ?? defaultSets(for: exercise.wrappedValue.name).first ?? ExerciseSet(weight: 25, reps: 5)
+        exercise.wrappedValue.sets.append(ExerciseSet(
+            weight: templateSet.weight,
+            reps: templateSet.reps,
+            isCompleted: false
+        ))
+    }
+
+    private func removeSet(from exercise: Binding<Exercise>, at index: Int) {
+        guard exercise.wrappedValue.sets.count > 1,
+              exercise.wrappedValue.sets.indices.contains(index) else { return }
+        exercise.wrappedValue.sets.remove(at: index)
+    }
+
+    private func removeExercise(_ exerciseID: UUID) {
+        removedExerciseIDs.insert(exerciseID)
+        exercises.removeAll { $0.id == exerciseID }
+        expandedExerciseIDs.remove(exerciseID)
+    }
+
+    private func toggleExerciseExpansion(_ exerciseID: UUID) {
+        if expandedExerciseIDs.contains(exerciseID) {
+            expandedExerciseIDs.remove(exerciseID)
+        } else {
+            expandedExerciseIDs.insert(exerciseID)
+        }
+    }
     
-    private func saveWorkoutSession() {
+    private func saveWorkoutSession() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalTitle = trimmedTitle.isEmpty ? "\(category.rawValue) Session" : trimmedTitle
-        
-        if let editing = editingWorkout {
-            let updated = WorkoutSession(
-                id: editing.id,
-                title: finalTitle,
-                date: date,
-                category: category,
-                notes: notes,
-                exercises: exercises,
-                durationMinutes: durationMinutes
-            )
-            workoutManager.updateWorkout(updated)
-        } else {
-            let workout = WorkoutSession(
-                title: finalTitle,
-                date: date,
-                category: category,
-                notes: notes,
-                exercises: exercises,
-                durationMinutes: durationMinutes
-            )
-            workoutManager.addWorkout(workout)
+        let finalExercises = exercisesForSave()
+        let workout = WorkoutSession(
+            id: editingWorkout?.id ?? draftWorkoutID,
+            title: finalTitle,
+            date: date,
+            category: category,
+            notes: notes,
+            exercises: finalExercises,
+            durationMinutes: durationMinutes
+        )
+
+        let didSave = await workoutManager.saveWorkout(
+            workout,
+            mergeExistingExercises: editingWorkout != nil,
+            removedExerciseIDs: removedExerciseIDs
+        )
+
+        if didSave {
+            newExerciseName = ""
+            dismiss()
         }
-        dismiss()
+    }
+
+    private func exercisesForSave() -> [Exercise] {
+        var finalExercises: [Exercise] = []
+
+        for exercise in exercises {
+            var normalizedExercise = exercise
+            normalizedExercise.name = trimmedExerciseName(exercise.name)
+            guard !normalizedExercise.name.isEmpty else { continue }
+
+            if normalizedExercise.sets.isEmpty {
+                normalizedExercise.sets = defaultSets(for: normalizedExercise.name)
+            }
+
+            if !exerciseExists(named: normalizedExercise.name, in: finalExercises) {
+                finalExercises.append(normalizedExercise)
+            }
+        }
+
+        let pendingName = trimmedExerciseName(newExerciseName)
+        guard !pendingName.isEmpty else { return finalExercises }
+
+        if !exerciseExists(named: pendingName, in: finalExercises) {
+            finalExercises.append(Exercise(name: pendingName, sets: defaultSets(for: pendingName)))
+        }
+
+        return finalExercises
+    }
+
+    private var weightFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }
+
+    private var repsFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.minimum = 0
+        return formatter
+    }
+
+    private func defaultSets(for exerciseName: String) -> [ExerciseSet] {
+        let usesBodyweight = exerciseDatabase.first { metadata in
+            metadata.name.caseInsensitiveCompare(exerciseName) == .orderedSame
+        }?.equipment.contains("bodyweight") == true
+
+        let weight = usesBodyweight ? 0.0 : 25.0
+        let reps = usesBodyweight ? 10 : 5
+        return Self.defaultEntrySets(weight: weight, reps: reps)
+    }
+
+    private static func defaultEntrySets(weight: Double = 25.0, reps: Int = 5) -> [ExerciseSet] {
+        (0..<3).map { _ in
+            ExerciseSet(weight: weight, reps: reps)
+        }
+    }
+
+    private static func normalizeExerciseForEntry(_ exercise: Exercise) -> Exercise {
+        var normalizedExercise = exercise
+        normalizedExercise.name = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedExercise.sets.isEmpty {
+            normalizedExercise.sets = Self.defaultEntrySets()
+        }
+        return normalizedExercise
+    }
+
+    private static func normalizedExerciseNameForComparison(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func exerciseDisplayName(_ name: String) -> String {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedName.isEmpty ? "Exercise" : trimmedName
+    }
+
+    private func lastSessionText(for exerciseName: String) -> String? {
+        guard let previousExercise = lastExerciseSession(named: exerciseName),
+              let representativeSet = previousExercise.sets.last ?? previousExercise.sets.first else { return nil }
+
+        return "Last session: \(formattedWeight(representativeSet.weight)) lbs x \(representativeSet.reps) x \(previousExercise.sets.count)"
+    }
+
+    private func lastExerciseSession(named exerciseName: String) -> Exercise? {
+        let targetName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !targetName.isEmpty else { return nil }
+
+        return workoutManager.workouts
+            .filter { workout in
+                workout.id != editingWorkout?.id && workout.date < date
+            }
+            .sorted { $0.date > $1.date }
+            .compactMap { workout in
+                workout.exercises.first {
+                    $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == targetName && !$0.sets.isEmpty
+                }
+            }
+            .first
+    }
+
+    private func compactSetSummary(for exercise: Exercise) -> String {
+        guard let firstSet = exercise.sets.first else { return "3 starter sets ready" }
+
+        let allSame = exercise.sets.allSatisfy {
+            $0.weight == firstSet.weight && $0.reps == firstSet.reps
+        }
+
+        if allSame {
+            return "\(exercise.sets.count) sets - \(formattedWeight(firstSet.weight)) lbs x \(firstSet.reps)"
+        } else {
+            return "\(exercise.sets.count) sets - mixed targets"
+        }
+    }
+
+    private func formattedWeight(_ weight: Double) -> String {
+        let roundedWeight = weight.rounded()
+        if abs(weight - roundedWeight) < 0.01 {
+            return "\(Int(roundedWeight))"
+        }
+        return String(format: "%.1f", weight)
     }
 }

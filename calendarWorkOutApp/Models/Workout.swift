@@ -58,7 +58,7 @@ struct Exercise: Identifiable, Codable, Equatable {
     }
 }
 
-struct WorkoutSession: Identifiable, Codable, Equatable {
+struct Workout: Identifiable, Codable, Equatable {
     var id = UUID()
     var title: String
     var date: Date
@@ -79,3 +79,5 @@ struct WorkoutSession: Identifiable, Codable, Equatable {
         !exercises.isEmpty && exercises.allSatisfy { $0.isCompleted }
     }
 }
+
+typealias WorkoutSession = Workout

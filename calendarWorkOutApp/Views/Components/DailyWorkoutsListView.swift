@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct DailyWorkoutsListView: View {
-    let workouts: [WorkoutSession]
+    @EnvironmentObject private var workoutManager: WorkoutManager
+
+    let date: Date
     let onLogWorkout: () -> Void
     let onDeleteWorkout: (WorkoutSession) -> Void
     let onToggleExerciseSet: (WorkoutSession, UUID, UUID) -> Void // Toggle a set's completeness!
@@ -9,6 +11,10 @@ struct DailyWorkoutsListView: View {
     let onToggleExerciseAllSets: (WorkoutSession, UUID, Bool) -> Void
     let onSelectExercise: (WorkoutSession, Exercise, Bool) -> Void
     let glowColor: Color
+
+    private var workouts: [WorkoutSession] {
+        workoutManager.workouts(for: date)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -181,6 +187,242 @@ struct WorkoutSessionCard: View {
         guard total > 0 else { return 0.5 }
         return strengthVolume / total
     }
+
+    private var stimulusBreakdownView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Strength: \(Int(strengthVolume)) lbs")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.cyan)
+
+                Spacer()
+
+                Text("Hypertrophy: \(Int(hypertrophyVolume)) lbs")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.orange)
+            }
+
+            GeometryReader { geometry in
+                let strengthWidth = geometry.size.width * CGFloat(strengthRatio)
+                let hypertrophyWidth = geometry.size.width - strengthWidth
+
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(Color.cyan)
+                        .frame(width: strengthWidth)
+
+                    Rectangle()
+                        .fill(Color.orange)
+                        .frame(width: hypertrophyWidth)
+                }
+            }
+            .frame(height: 6)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+        }
+    }
+
+    private var insightsFooter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    isInsightsExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "waveform.path.ecg.gradient")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(workout.category.color)
+
+                    Text("Live Session Insights")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+
+                    Text(isInsightsExpanded ? "Collapse" : "Expand")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.4))
+
+                    Image(systemName: isInsightsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+
+            if isInsightsExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(workout.category.color)
+
+                        Text("\(Int(liveTotalVolume)) lbs")
+                            .font(.system(size: 14, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+
+                        Text("total volume lifted today")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+
+                    stimulusBreakdownView
+
+                    if !workout.notes.isEmpty {
+                        Divider()
+                            .background(Color.white.opacity(0.08))
+
+                        Text(workout.notes)
+                            .font(.system(size: 11, weight: .regular, design: .rounded))
+                            .italic()
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.top, 2)
+                    }
+                }
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            } else if !workout.notes.isEmpty {
+                Text(workout.notes)
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.4))
+                    .lineLimit(1)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var exercisesSection: some View {
+        if !workout.exercises.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(workout.exercises) { exercise in
+                    exerciseRow(exercise)
+                }
+
+                if workout.title == "Today Work" {
+                    inlineExerciseEntry
+                }
+            }
+            .padding(8)
+            .background(Color.black.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func exerciseRow(_ exercise: Exercise) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(exercise.name)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.vertical, 2)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, exerciseSet in
+                        exerciseSetControl(
+                            exerciseSet,
+                            index: index,
+                            exerciseID: exercise.id
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.leading, 6)
+        .opacity(exercise.isCompleted ? 0.45 : 1.0)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onSelectExercise(workout, exercise, true)
+        }
+        .onLongPressGesture(minimumDuration: 0.8) {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.prepare()
+            generator.impactOccurred()
+            exerciseToDelete = exercise
+            showDeleteConfirmation = true
+        }
+    }
+
+    private func exerciseSetControl(
+        _ exerciseSet: ExerciseSet,
+        index: Int,
+        exerciseID: UUID
+    ) -> some View {
+        HStack(spacing: 4) {
+            ExerciseSetButton(
+                index: index,
+                set: exerciseSet,
+                category: workout.category
+            )
+
+            Button {
+                Task<Void, Never> {
+                    _ = await workoutManager.duplicateSet(
+                        in: workout,
+                        exerciseId: exerciseID,
+                        setId: exerciseSet.id
+                    )
+                }
+            } label: {
+                Image(systemName: "plus.square.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.trailing, 2)
+    }
+
+    private var inlineExerciseEntry: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+                .background(Color.white.opacity(0.1))
+                .padding(.vertical, 2)
+
+            HStack {
+                TextField("", text: $newInlineExerciseName)
+                    .disabled(true)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    }
+
+                Button {
+                    let name = newInlineExerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { return }
+
+                    onSelectExercise(workout, Exercise(name: name, sets: []), false)
+                    newInlineExerciseName = ""
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(workout.category.color)
+                }
+                .disabled(newInlineExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(.horizontal, 6)
+    }
+
     private func getNextSetPreviewText(for exercise: Exercise) -> String {
         if let nextIncompleteIndex = exercise.sets.firstIndex(where: { !$0.isCompleted }) {
             let nextSet = exercise.sets[nextIncompleteIndex]
@@ -270,218 +512,17 @@ struct WorkoutSessionCard: View {
                 .buttonStyle(.plain)
             }
             // Exercises list
-            if !workout.exercises.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(workout.exercises) { exercise in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(exercise.name)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.white.opacity(0.9))
-                            }
-                            .padding(.vertical, 2)
-                            // Display sets
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { (index, set) in
-                                        HStack(spacing: 4) {
-                                            ExerciseSetButton(
-                                                index: index,
-                                                set: set,
-                                                category: workout.category
-                                            )
-                                            // Feature 3: One-Tap Set Duplication Button
-                                            Button(action: {
-                                                workoutManager.duplicateSet(in: workout, exerciseId: exercise.id, setId: set.id)
-                                            }) {
-                                                Image(systemName: "plus.square.fill")
-                                                    .font(.system(size: 10))
-                                                    .foregroundStyle(.white.opacity(0.35))
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                        .padding(.trailing, 2)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.leading, 6)
-                        .opacity(exercise.isCompleted ? 0.45 : 1.0) // Dimmed when completed
-                        .contentShape(Rectangle()) // Make the exercise row tappable
-                        .onTapGesture {
-                            onSelectExercise(workout, exercise, true) // Opens the specialized focused edit sheet!
-                        }
-                        .onLongPressGesture(minimumDuration: 0.8) {
-                            let generator = UIImpactFeedbackGenerator(style: .medium)
-                            generator.prepare()
-                            generator.impactOccurred()
-                            exerciseToDelete = exercise
-                            showDeleteConfirmation = true
-                        }
-                    }
-                    
-                    // Custom Exercise Addition directly inline at card bottom
-                    if workout.title == "Today Work" {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Divider()
-                                .background(Color.white.opacity(0.1))
-                                .padding(.vertical, 2)
-                            
-                            HStack {
-                                TextField("", text: $newInlineExerciseName)
-                                    .disabled(true)
-                                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                                    .textFieldStyle(.plain)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.06))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                    )
-                                
-                                Button(action: {
-                                    let name = newInlineExerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !name.isEmpty else { return }
-                                    
-                                    // Trigger specialized focused sheet in Creation Mode (isEditMode: false)
-                                    onSelectExercise(workout, Exercise(name: name, sets: []), false)
-                                    newInlineExerciseName = ""
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundStyle(workout.category.color)
-                                }
-                                .disabled(newInlineExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                        .padding(.horizontal, 6)
-                    }
-                }
-                .padding(8)
-                .background(Color.black.opacity(0.15))
-                .cornerRadius(12)
-            }
+            exercisesSection
             
             // Feature: Expanding Live Insights Dashboard Footer
-            VStack(alignment: .leading, spacing: 10) {
-                Button(action: {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        isInsightsExpanded.toggle()
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "waveform.path.ecg.gradient")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(workout.category.color)
-                        
-                        Text("Live Session Insights")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                        
-                        Spacer()
-                        
-                        Text(isInsightsExpanded ? "Collapse" : "Expand")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.4))
-                        
-                        Image(systemName: isInsightsExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-                
-                if isInsightsExpanded {
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Live Volume Computation Display
-                        HStack {
-                            Image(systemName: "flame.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(workout.category.color)
-                            
-                            Text("\(Int(liveTotalVolume)) lbs")
-                                .font(.system(size: 14, weight: .black, design: .rounded))
-                                .foregroundStyle(.white)
-                            
-                            Text("total volume lifted today")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.5))
-                        }
-                        
-                        // Stimulus Breakdown Bar (Low reps / Strength vs High reps / Hypertrophy)
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Strength: \(Int(strengthVolume)) lbs")
-                                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.cyan)
-                                
-                                Spacer()
-                                
-                                Text("Hypertrophy: \(Int(hypertrophyVolume)) lbs")
-                                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.orange)
-                            }
-                            
-                            GeometryReader { geo in
-                                HStack(spacing: 0) {
-                                    Rectangle()
-                                        .fill(Color.cyan)
-                                        .frame(width: geo.size.width * CGFloat(strengthRatio))
-                                    
-                                    Rectangle()
-                                        .fill(Color.orange)
-                                        .frame(width: geo.size.width * CGFloat(1.0 - strengthRatio))
-                                }
-                            }
-                            .frame(height: 6)
-                            .cornerRadius(3)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                            )
-                        }
-                        
-                        // Original notes context inside insights bar
-                        if !workout.notes.isEmpty {
-                            Divider()
-                                .background(Color.white.opacity(0.08))
-                            
-                            Text(workout.notes)
-                                .font(.system(size: 11, weight: .regular, design: .rounded))
-                                .italic()
-                                .foregroundStyle(.white.opacity(0.5))
-                                .padding(.top, 2)
-                        }
-                    }
-                    .padding(.top, 4)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                } else if !workout.notes.isEmpty {
-                    // Minimal notes preview when collapsed
-                    Text(workout.notes)
-                        .font(.system(size: 11, weight: .regular, design: .rounded))
-                        .italic()
-                        .foregroundStyle(.white.opacity(0.4))
-                        .lineLimit(1)
-                }
-            }
-            .padding(10)
-            .background(Color.white.opacity(0.03))
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.white.opacity(0.05), lineWidth: 1)
-            )
+            insightsFooter
         }
         .padding(14)
         .background(.ultraThinMaterial)
         .cornerRadius(24)
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(Color(red: 1, green: 1, blue: 1, opacity: 0.12), lineWidth: 1)
         )
         .contentShape(Rectangle()) // Make the whole card area tappable
         .onTapGesture {
@@ -489,8 +530,8 @@ struct WorkoutSessionCard: View {
         }
         .alert("Delete Exercise?", isPresented: $showDeleteConfirmation, presenting: exerciseToDelete) { exercise in
             Button("Delete", role: .destructive) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    workoutManager.deleteExercise(from: workout, exerciseId: exercise.id)
+                Task<Void, Never> {
+                    _ = await workoutManager.deleteExercise(from: workout, exerciseId: exercise.id)
                 }
             }
             Button("Cancel", role: .cancel) {}

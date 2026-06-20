@@ -1,7 +1,11 @@
 import SwiftUI
 import EventKit
-import CoreLocation
-import MapKit
+
+private struct WorkoutLogPresentation: Identifiable {
+    let id = UUID()
+    let defaultDate: Date
+    let editingWorkout: WorkoutSession?
+}
 
 /// The main view of our application, combining a dynamic weather-responsive background canvas,
 /// horizontal visual date selections, calendar event listings, and a highly detailed weather metrics drawer.
@@ -11,10 +15,9 @@ public struct DailyCanvasView: View {
     @State private var locationManager = LocationManager()
     
     @EnvironmentObject var workoutManager: WorkoutManager
-    @State private var showWorkoutLogSheet = false
+    @State private var workoutLogPresentation: WorkoutLogPresentation?
     @State private var suggestedCategory: WorkoutCategory? = nil
     @State private var suggestedTitle: String = ""
-    @State private var editingWorkout: WorkoutSession? = nil
     @State private var selectedExerciseItem: ExerciseEditItem? = nil
     
     @State private var selectedDate = Date()
@@ -22,12 +25,6 @@ public struct DailyCanvasView: View {
     @State private var isLoading = false
     @State private var showEventEditSheet = false
     @State private var editingEvent: EKEvent? = nil
-    
-    @State private var searchedLocation: CLLocation? = nil
-    @State private var searchedCityName: String? = nil
-    @State private var searchText: String = ""
-    @State private var searchViewModel = LocationSearchViewModel(isGlobal: true)
-    @FocusState private var isSearchActive: Bool
     
     // Dates for the horizontal date selector (today + next 14 days)
     private let dates: [Date] = {
@@ -74,35 +71,44 @@ public struct DailyCanvasView: View {
                     )
                         .onChange(of: selectedDate) { _, newDate in
                             selectedExerciseItem = nil // Drop transient row models from view memory
-                            workoutManager.prepareWorkouts(for: newDate) // Safely prepare workouts for the new date
                             Task {
+                                await workoutManager.prepareWorkouts(for: newDate)
                                 await refreshData(for: newDate)
                             }
                         }
-                    
+
                     // Daily Workouts List (Shows user logged workouts for today)
                     DailyWorkoutsListView(
-                        workouts: workoutManager.workouts(for: selectedDate),
+                        date: selectedDate,
                         onLogWorkout: {
                             self.suggestedCategory = nil
                             self.suggestedTitle = ""
-                            self.showWorkoutLogSheet = true
+                            self.workoutLogPresentation = WorkoutLogPresentation(
+                                defaultDate: selectedDate,
+                                editingWorkout: nil
+                            )
                         },
                         onDeleteWorkout: { workout in
-                            workoutManager.removeWorkout(workout)
+                            Task {
+                                await workoutManager.removeWorkout(workout)
+                            }
                         },
                         onToggleExerciseSet: { workout, exerciseId, setId in
                             var updatedWorkout = workout
                             if let exerciseIndex = updatedWorkout.exercises.firstIndex(where: { $0.id == exerciseId }) {
                                 if let setIndex = updatedWorkout.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) {
                                     updatedWorkout.exercises[exerciseIndex].sets[setIndex].isCompleted.toggle()
-                                    workoutManager.updateWorkout(updatedWorkout)
+                                    Task {
+                                        await workoutManager.updateWorkout(updatedWorkout)
+                                    }
                                 }
                             }
                         },
                         onSelectWorkout: { workout in
-                            self.editingWorkout = workout
-                            self.showWorkoutLogSheet = true
+                            self.workoutLogPresentation = WorkoutLogPresentation(
+                                defaultDate: workout.date,
+                                editingWorkout: workout
+                            )
                         },
                         onToggleExerciseAllSets: { workout, exerciseId, isCompleted in
                             var updatedWorkout = workout
@@ -110,7 +116,9 @@ public struct DailyCanvasView: View {
                                 for setIndex in updatedWorkout.exercises[exerciseIndex].sets.indices {
                                     updatedWorkout.exercises[exerciseIndex].sets[setIndex].isCompleted = isCompleted
                                 }
-                                workoutManager.updateWorkout(updatedWorkout)
+                                Task {
+                                    await workoutManager.updateWorkout(updatedWorkout)
+                                }
                             }
                         },
                         onSelectExercise: { workout, exercise, isEditMode in
@@ -135,225 +143,85 @@ public struct DailyCanvasView: View {
                             ))
                             .padding(.horizontal)
                     }
-                    
-                    // Global Location Search Bar
-                    VStack(spacing: 8) {
-                        HStack(spacing: 10) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "magnifyingglass")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.6))
-                                
-                                TextField("Search locations...", text: $searchText)
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.white)
-                                    .focused($isSearchActive)
-                                    .onSubmit {
-                                        if !searchText.isEmpty {
-                                            performSearch(for: searchText)
-                                        }
-                                    }
-                                
-                                if !searchText.isEmpty {
-                                    Button(action: {
-                                        searchText = ""
-                                        searchViewModel.clearResults()
-                                    }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.white.opacity(0.6))
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(15)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 15)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                            )
-                            
-                            // Revert/Reset to live GPS location button
-                            if searchedLocation != nil {
-                                Button(action: resetToCurrentLocation) {
-                                    Image(systemName: "location.fill")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 38, height: 38)
-                                        .background(.ultraThinMaterial)
-                                        .clipShape(Circle())
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                        )
-                                }
-                                .transition(.scale.combined(with: .opacity))
-                            }
-                        }
-                        .padding(.horizontal)
-                        
-                        // Suggestion Dropdown Panel
-                        if isSearchActive && !searchViewModel.results.isEmpty {
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    ForEach(searchViewModel.results, id: \.self) { completion in
-                                        Button(action: {
-                                            selectSearchedLocation(completion)
-                                        }) {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(completion.title)
-                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                                    .foregroundStyle(.white)
-                                                if !completion.subtitle.isEmpty {
-                                                    Text(completion.subtitle)
-                                                        .font(.system(size: 11, weight: .regular, design: .rounded))
-                                                        .foregroundStyle(.white.opacity(0.6))
-                                                }
-                                            }
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .padding(.vertical, 8)
-                                            .padding(.horizontal, 14)
-                                            .contentShape(Rectangle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        
-                                        if completion != searchViewModel.results.last {
-                                            Divider()
-                                                .background(Color.white.opacity(0.08))
-                                        }
-                                    }
-                                }
-                            }
-                            .frame(maxHeight: 200)
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(15)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 15)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                            )
-                            .padding(.horizontal)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-                    }
-                    .padding(.bottom, 6)
-                    .onChange(of: searchText) { _, newValue in
-                        if isSearchActive {
-                            searchViewModel.queryFragment = newValue
-                        }
-                    }
-                    .onChange(of: isSearchActive) { _, newValue in
-                        if !newValue {
-                            searchViewModel.clearResults()
-                        }
-                    }
-                    
-                    // Main Loading Indicator or permission prompts / visual cards
+
                     if isLoading {
                         VStack {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(1.3)
-                                .padding(.vertical, 40)
+                                .padding(.vertical, 28)
                         }
-                    } else {
-                        // Display Permissions overlay in the feed if access is pending
-                        if calendarManager.permissionStatus != .authorized || locationManager.permissionStatus != .authorized {
-                            PermissionsOverlayView(
-                                calendarStatus: calendarManager.permissionStatus,
-                                locationStatus: locationManager.permissionStatus,
-                                onRequestCalendar: {
-                                    Task {
-                                        _ = try? await calendarManager.requestCalendarAccess()
-                                        await refreshData(for: selectedDate)
-                                    }
-                                },
-                                onRequestLocation: {
-                                    locationManager.requestLocationAccess()
-                                }
-                            )
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                            .padding(.horizontal)
-                        }
-                        
-                        // 1. TOP ZONE: Granular Weather Metrics Drawer (Slides & Fades into place on date change)
-                        if let weather = weatherManager.currentForecast {
-                            WeatherMetricsDrawer(weather: weather)
-                                .id("weather-drawer-\(selectedDate.timeIntervalSince1970)")
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                    removal: .opacity
-                                ))
-                                .padding(.horizontal)
-                            
-                            // Outdoor Activity Hub Drawer
-                            OutdoorActivityHubView(
-                                weather: weather,
-                                currentLocation: searchedLocation ?? locationManager.lastLocation ?? WeatherManager.fallbackLocation,
-                                glowColor: weatherGlowColor(for: weather.symbolName),
-                                selectedDate: selectedDate
-                            )
-                            .id("activity-hub-\(selectedDate.timeIntervalSince1970)")
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                removal: .opacity
-                            ))
-                            .padding(.horizontal)
-                            
-                            // Workout Suggestion Card (AI recommends workouts based on weather)
-                            WorkoutSuggestionsView(
-                                weather: weather,
-                                onSelectSuggestion: { category, title in
-                                    self.suggestedCategory = category
-                                    self.suggestedTitle = title
-                                    self.showWorkoutLogSheet = true
-                                },
-                                glowColor: weatherGlowColor(for: weather.symbolName)
-                            )
-                            .id("workout-suggestion-\(selectedDate.timeIntervalSince1970)")
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                removal: .opacity
-                            ))
-                            .padding(.horizontal)
-                        }
-                        
-                        // 2. BOTTOM ZONE: Daily Agenda / To-Do Timelines with Embedded Creation Sheet Trigger
-                        TimelineView(
-                            events: eventsForSelectedDate,
-                            glowColor: weatherGlowColor(for: weatherManager.currentForecast?.symbolName ?? ""),
-                            onAddEvent: {
-                                editingEvent = nil
-                                showEventEditSheet = true
-                            },
-                            onSelectEvent: { event in
-                                editingEvent = event
-                                showEventEditSheet = true
-                            }
-                        )
-                        .id("agenda-timeline-\(selectedDate.timeIntervalSince1970)")
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .trailing)),
-                            removal: .opacity
-                        ))
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal)
-                        .padding(.bottom, 8)
-                        
-                        // Real-Time Commute Tracker
-                        CommuteTrackerView(
-                            events: eventsForSelectedDate,
-                            currentLocation: locationManager.lastLocation,
-                            glowColor: weatherGlowColor(for: weatherManager.currentForecast?.symbolName ?? ""),
+                    } else if let weather = weatherManager.currentForecast {
+                        OutdoorActivityHubView(
+                            weather: weather,
+                            currentLocation: locationManager.lastLocation ?? WeatherManager.fallbackLocation,
+                            glowColor: weatherGlowColor(for: weather.symbolName),
                             selectedDate: selectedDate
                         )
-                        .id("commute-tracker-\(selectedDate.timeIntervalSince1970)")
+                        .id("activity-hub-\(selectedDate.timeIntervalSince1970)")
                         .transition(.asymmetric(
                             insertion: .opacity.combined(with: .move(edge: .trailing)),
                             removal: .opacity
                         ))
                         .padding(.horizontal)
-                        .padding(.bottom, 96) // Extra bottom padding to clear the FAB comfortably
+
+                        WorkoutSuggestionsView(
+                            weather: weather,
+                            onSelectSuggestion: { category, title in
+                                self.suggestedCategory = category
+                                self.suggestedTitle = title
+                                self.workoutLogPresentation = WorkoutLogPresentation(
+                                    defaultDate: selectedDate,
+                                    editingWorkout: nil
+                                )
+                            },
+                            glowColor: weatherGlowColor(for: weather.symbolName)
+                        )
+                        .id("workout-suggestion-\(selectedDate.timeIntervalSince1970)")
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .trailing)),
+                            removal: .opacity
+                        ))
+                        .padding(.horizontal)
                     }
+
+                    // Daily Agenda / To-Do Timelines with Embedded Creation Sheet Trigger
+                    TimelineView(
+                        events: eventsForSelectedDate,
+                        glowColor: weatherGlowColor(for: weatherManager.currentForecast?.symbolName ?? ""),
+                        onAddEvent: {
+                            editingEvent = nil
+                            showEventEditSheet = true
+                        },
+                        onSelectEvent: { event in
+                            editingEvent = event
+                            showEventEditSheet = true
+                        }
+                    )
+                    .id("agenda-timeline-\(selectedDate.timeIntervalSince1970)")
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                        removal: .opacity
+                    ))
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+
+                    // Real-Time Commute Tracker
+                    CommuteTrackerView(
+                        events: eventsForSelectedDate,
+                        currentLocation: locationManager.lastLocation,
+                        glowColor: weatherGlowColor(for: weatherManager.currentForecast?.symbolName ?? ""),
+                        selectedDate: selectedDate
+                    )
+                    .id("commute-tracker-\(selectedDate.timeIntervalSince1970)")
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                        removal: .opacity
+                    ))
+                    .padding(.horizontal)
+                    .padding(.bottom, 96) // Extra bottom padding to clear the FAB comfortably
                 }
             }
             .safeAreaInset(edge: .top) {
@@ -397,25 +265,19 @@ public struct DailyCanvasView: View {
                 }
             }
         }
-        .sheet(isPresented: $showWorkoutLogSheet, onDismiss: {
-            editingWorkout = nil
-        }) {
-            WorkoutLogSheet(defaultDate: selectedDate, editingWorkout: editingWorkout)
+        .sheet(item: $workoutLogPresentation) { presentation in
+            WorkoutLogSheet(
+                defaultDate: presentation.defaultDate,
+                editingWorkout: presentation.editingWorkout,
+                draftWorkoutID: presentation.id
+            )
                 .environmentObject(workoutManager)
         }
         .sheet(item: $selectedExerciseItem) { item in
-            IndividualExerciseEditSheet(workout: item.workout, exercise: item.exercise, isEditMode: item.isEditMode) { updatedExercise in
-                var updatedWorkout = item.workout
-                if item.isEditMode {
-                    if let idx = updatedWorkout.exercises.firstIndex(where: { $0.id == updatedExercise.id }) {
-                        updatedWorkout.exercises[idx] = updatedExercise
-                        workoutManager.updateWorkout(updatedWorkout)
-                    }
-                } else {
-                    updatedWorkout.exercises.append(updatedExercise)
-                    workoutManager.updateWorkout(updatedWorkout)
-                }
+            IndividualExerciseEditSheet(workout: item.workout, exercise: item.exercise, isEditMode: item.isEditMode) { _ in
+                selectedExerciseItem = nil
             }
+            .environmentObject(workoutManager)
         }
         // 3. Native Event Creation Modal Sheet Bridge
         .sheet(isPresented: $showEventEditSheet, onDismiss: {
@@ -455,11 +317,32 @@ public struct DailyCanvasView: View {
         .task {
             // Start location updates immediately on appear
             locationManager.startUpdatingLocation()
-            workoutManager.prepareWorkouts(for: selectedDate) // Safely prepare workouts for initial date
+            if await workoutManager.fetchWorkouts() {
+                await workoutManager.prepareWorkouts(for: selectedDate)
+            }
             await refreshData(for: selectedDate)
         }
         .onDisappear {
             locationManager.stopUpdatingLocation()
+        }
+        .alert(
+            "Workout Sync Error",
+            isPresented: Binding(
+                get: { workoutManager.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        DispatchQueue.main.async {
+                            workoutManager.clearError()
+                        }
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                workoutManager.clearError()
+            }
+        } message: {
+            Text(workoutManager.errorMessage ?? "The workout data could not be synchronized.")
         }
     }
     
@@ -536,7 +419,7 @@ public struct DailyCanvasView: View {
         defer { isLoading = false }
         
         // 1. Fetch Location or use Cupertino fallback coordinate
-        let location = searchedLocation ?? locationManager.lastLocation ?? WeatherManager.fallbackLocation
+        let location = locationManager.lastLocation ?? WeatherManager.fallbackLocation
         
         // 2. Concurrently fetch events & weather updates
         async let fetchedEvents = fetchCalendarEvents(for: date)
@@ -550,66 +433,6 @@ public struct DailyCanvasView: View {
         }
     }
     
-    private func selectSearchedLocation(_ completion: MKLocalSearchCompletion) {
-        searchText = completion.title
-        isSearchActive = false
-        searchViewModel.clearResults()
-        
-        let searchRequest = MKLocalSearch.Request(completion: completion)
-        let search = MKLocalSearch(request: searchRequest)
-        
-        Task {
-            do {
-                let response = try await search.start()
-                if let item = response.mapItems.first {
-                    self.searchedLocation = item.placemark.location
-                    self.searchedCityName = item.name ?? completion.title
-                    
-                    // Trigger refresh
-                    await refreshData(for: selectedDate)
-                }
-            } catch {
-                print("Failed to geocode autocomplete selection: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    private func performSearch(for query: String) {
-        isSearchActive = false
-        searchViewModel.clearResults()
-        
-        let searchRequest = MKLocalSearch.Request()
-        searchRequest.naturalLanguageQuery = query
-        let search = MKLocalSearch(request: searchRequest)
-        
-        Task {
-            do {
-                let response = try await search.start()
-                if let item = response.mapItems.first {
-                    self.searchedLocation = item.placemark.location
-                    self.searchedCityName = item.name ?? query
-                    
-                    // Trigger refresh
-                    await refreshData(for: selectedDate)
-                }
-            } catch {
-                print("Failed to search query: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    private func resetToCurrentLocation() {
-        withAnimation(.spring()) {
-            searchedLocation = nil
-            searchedCityName = nil
-            searchText = ""
-            searchViewModel.clearResults()
-        }
-        Task {
-            await refreshData(for: selectedDate)
-        }
-    }
-    
     private func fetchCalendarEvents(for date: Date) async -> [EKEvent] {
         do {
             return try await calendarManager.fetchEvents(for: date)
@@ -620,9 +443,6 @@ public struct DailyCanvasView: View {
     }
     
     private var locationName: String {
-        if let searchedCityName {
-            return searchedCityName
-        }
         guard locationManager.permissionStatus == .authorized else {
             return "Cupertino"
         }

@@ -14,9 +14,11 @@ struct IndividualExerciseEditSheet: View {
     var onSave: (Exercise) -> Void
     
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var workoutManager: WorkoutManager
     @State private var name: String
     @State private var setsList: [SetInput]
     @State private var notes: String
+    @State private var isSaving = false
     
     // Active Rest Timer State
     @State private var activeTimerSetId: UUID? = nil
@@ -105,6 +107,7 @@ struct IndividualExerciseEditSheet: View {
                     }
                     .font(.system(size: 16, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.6))
+                    .disabled(isSaving)
                     
                     Spacer()
                     
@@ -114,25 +117,42 @@ struct IndividualExerciseEditSheet: View {
                     
                     Spacer()
                     
-                    Button("Save") {
-                        let validatedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !validatedName.isEmpty else { return }
-                        
-                        let finalSets = setsList.map { input in
-                            let parsedWeight = Double(input.weight.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0.0
-                            let parsedReps = Int(input.reps.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 10
-                            return ExerciseSet(weight: parsedWeight, reps: parsedReps, isCompleted: input.isCompleted)
+                    Button {
+                        Task {
+                            guard !isSaving else { return }
+                            isSaving = true
+                            defer { isSaving = false }
+
+                            let validatedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !validatedName.isEmpty else { return }
+
+                            let finalSets = setsList.map { input in
+                                let parsedWeight = Double(input.weight.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0.0
+                                let parsedReps = Int(input.reps.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 10
+                                return ExerciseSet(weight: parsedWeight, reps: parsedReps, isCompleted: input.isCompleted)
+                            }
+
+                            var updatedExercise = exercise
+                            updatedExercise.name = validatedName
+                            updatedExercise.sets = finalSets
+                            updatedExercise.notes = notes
+
+                            if await workoutManager.saveExercise(updatedExercise, in: workout) {
+                                onSave(updatedExercise)
+                                dismiss()
+                            }
                         }
-                        
-                        var updatedExercise = exercise
-                        updatedExercise.name = validatedName
-                        updatedExercise.sets = finalSets
-                        updatedExercise.notes = notes
-                        onSave(updatedExercise)
-                        dismiss()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .tint(workout.category.color)
+                        } else {
+                            Text("Save")
+                        }
                     }
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(workout.category.color)
+                    .disabled(isSaving)
                 }
                 .padding(.top, 20)
                 
@@ -421,6 +441,25 @@ struct IndividualExerciseEditSheet: View {
                 setsList = mapped.isEmpty ? [SetInput(weight: "", reps: "", isCompleted: false)] : mapped
                 stopRestTimer()
             }
+        }
+        .alert(
+            "Workout Sync Error",
+            isPresented: Binding(
+                get: { workoutManager.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        DispatchQueue.main.async {
+                            workoutManager.clearError()
+                        }
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                workoutManager.clearError()
+            }
+        } message: {
+            Text(workoutManager.errorMessage ?? "The exercise could not be saved.")
         }
     }
     
